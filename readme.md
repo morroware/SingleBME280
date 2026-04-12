@@ -91,15 +91,24 @@ dashboard_api_key = your-secret-api-key
 bme280_address = 0x76                 # 0x76 or 0x77
 ```
 
-### 3. Run on boot
+### 3. Run on boot (systemd)
 
 ```bash
-sudo crontab -e
+sudo cp singlebme280.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable singlebme280
+sudo systemctl start singlebme280
 ```
-Add:
+
+Edit the service file first if your user or install path differs from `/home/tech/SingleBME280`.
+
+Check status:
+```bash
+sudo systemctl status singlebme280
+journalctl -u singlebme280 -f
 ```
-@reboot cd /home/pi/SingleBME280 && python3 SingleBME280.py >> /home/pi/sensor.log 2>&1
-```
+
+> **Note:** The service waits 15 seconds before starting to ensure I2C and networking are ready. If you were previously using `@reboot` in crontab, remove that entry to avoid running two instances.
 
 ### 4. Test
 
@@ -194,6 +203,7 @@ Returns time-series data for charts.
 SingleBME280/
 ├── SingleBME280.py              # Pi Zero sensor script
 ├── SingleSensorSettings.conf    # Pi Zero config
+├── singlebme280.service         # systemd unit for auto-start on boot
 ├── templates/
 │   └── settings.html            # Pi Zero web settings UI (Flask template)
 ├── readme.md
