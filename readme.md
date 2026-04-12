@@ -1,143 +1,224 @@
-# Single BME280 with Adafruit IO and Slack integration.
+# SingleSensor – BME280 / SCD40 Monitoring with Self-Hosted Dashboard
 
-This repository contains a Raspberry Pi script to read data from a BME280 sensor, log the data to Adafruit IO, and send Slack alerts when necessary. It also includes a web frontend for easy access to settings/configs.
+Raspberry Pi Zero sensor monitoring system with a self-hosted PHP dashboard. Supports **BME280** (temperature + humidity) and **SCD40** (temperature + humidity + CO2) sensors. Designed for deploying many Pi Zeros across different locations, all reporting to a single dashboard hosted on shared cPanel hosting.
 
-## Table of Contents
+## Architecture
 
-- [Prerequisites](#prerequisites)
-- [Hardware Setup](#hardware-setup)
-- [Software Setup](#software-setup)
-  - [Setting Up Wi-Fi](#setting-up-wi-fi)
-  - [Installing Dependencies](#installing-dependencies)
-  - [Setting Up the Script](#setting-up-the-script)
-  - [Setting Up the Script to Run on Boot](#setting-up-the-script-to-run-on-boot)
-- [Usage](#usage)
+```
+┌──────────────┐     HTTPS POST      ┌─────────────────────┐
+│  Pi Zero #1  │ ──────────────────>  │                     │
+│  (BME280)    │                      │  cPanel Dashboard   │
+├──────────────┤                      │  (PHP + MySQL)      │
+│  Pi Zero #2  │ ──────────────────>  │                     │
+│  (SCD40)     │                      │  - Chart.js UI      │
+├──────────────┤                      │  - REST API         │
+│  Pi Zero #N  │ ──────────────────>  │  - Auto-purge       │
+│  (BME280)    │                      │                     │
+└──────────────┘                      └─────────────────────┘
+```
+
+Each Pi Zero runs `SingleBME280.py`, which:
+- Auto-detects the connected sensor (BME280 or SCD40)
+- Reads temperature, humidity, and CO2 (SCD40 only) on a configurable interval
+- POSTs JSON to the dashboard API over HTTPS
+- Sends Slack alerts when temperature thresholds are exceeded
+- Serves a local settings page on port 5000
 
 ## Prerequisites
 
-- Raspberry Pi with Raspbian OS installed.
-- BME280 sensor.
-- Internet connection.
-- Slack account (for alerts).
-- Adafruit IO account (for logging data).
+- **Per Pi Zero**: Raspberry Pi Zero W with either a BME280 or SCD40 sensor
+- **Dashboard server**: Any cPanel shared hosting account with PHP 7.4+ and MySQL
 
 ## Hardware Setup
 
-1. **Connect the BME280 Sensor to the Raspberry Pi:**
-   - Connect the `VCC` pin of the BME280 to the `3.3V` pin on the Raspberry Pi.
-   - Connect the `GND` pin of the BME280 to any `GND` pin on the Raspberry Pi.
-   - Connect the `SDA` pin of the BME280 to the `SDA` pin (GPIO 2) on the Raspberry Pi.
-   - Connect the `SCL` pin of the BME280 to the `SCL` pin (GPIO 3) on the Raspberry Pi.
+### BME280 Wiring (I2C)
 
-2. Power on the Raspberry Pi.
+| BME280 Pin | Pi GPIO |
+|------------|---------|
+| VCC        | 3.3V    |
+| GND        | GND     |
+| SDA        | GPIO 2  |
+| SCL        | GPIO 3  |
 
-## Software Setup
+### SCD40 Wiring (I2C)
 
-### Setting Up Wi-Fi
+| SCD40 Pin | Pi GPIO |
+|-----------|---------|
+| VCC       | 3.3V    |
+| GND       | GND     |
+| SDA       | GPIO 2  |
+| SCL       | GPIO 3  |
 
-1. Open the terminal on your Raspberry Pi.
-2. Navigate to the `wpa_supplicant` configuration file:
+Enable I2C on your Pi if not already done:
+```bash
+sudo raspi-config   # Interface Options → I2C → Enable
+```
 
-   ```bash
-   sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
-   ```
+## Pi Zero Setup
 
-3. Add the following lines to the end of the file, replacing `YOUR_NETWORK_NAME` and `YOUR_PASSWORD` with your Wi-Fi details:
+### 1. Install dependencies
 
-   ```bash
-   network={
-       ssid="YOUR_NETWORK_NAME"
-       psk="YOUR_PASSWORD"
-   }
-   ```
+```bash
+sudo apt update && sudo apt install -y python3-pip
 
-4. Save and close the file.
-5. Reboot the Raspberry Pi:
+# For BME280 sensors:
+pip3 install flask smbus2 RPi.bme280 slack_sdk configparser
 
-   ```bash
-   sudo reboot
-   ```
+# For SCD40 sensors:
+pip3 install flask adafruit-circuitpython-scd4x slack_sdk configparser
+```
 
-### Installing Dependencies
+### 2. Clone and configure
 
-1. Update the package list:
+```bash
+git clone https://github.com/morroware/SingleBME280.git
+cd SingleBME280
+mkdir -p templates
+cp settings.html templates/
+```
 
-   ```bash
-   sudo apt update
-   ```
+Edit `SingleSensorSettings.conf`:
+```ini
+[General]
+sensor_location_name = kitchen        # Unique name for this sensor
+sensor_type = auto                    # auto | bme280 | scd40
+minutes_between_reads = 5
+sensor_threshold_temp = 88.0          # High temp alert (°F)
+sensor_lower_threshold_temp = 40.0    # Low temp alert (°F)
+threshold_count = 3                   # Consecutive readings before alert
+slack_channel = alerts
+slack_api_token = xoxb-your-token
+dashboard_url = https://yourdomain.com/dashboard/api/submit.php
+dashboard_api_key = your-secret-api-key
+bme280_address = 0x76                 # 0x76 or 0x77
+```
 
-2. Install pip for Python:
+### 3. Run on boot
 
-   ```bash
-   sudo apt install python3-pip
-   ```
+```bash
+sudo crontab -e
+```
+Add:
+```
+@reboot cd /home/pi/SingleBME280 && python3 SingleBME280.py >> /home/pi/sensor.log 2>&1
+```
 
-3. Install the required Python libraries:
+### 4. Test
 
-   ```bash
-   pip3 install flask smbus2 bme280 slack_sdk configparser Adafruit_IO
-   ```
+```bash
+python3 SingleBME280.py
+```
+Access settings at `http://<pi_ip>:5000/settings`.
 
-### Setting Up the Script
+## Dashboard Setup (cPanel)
 
-1. Clone the repository:
+### 1. Create a MySQL database
 
-   ```bash
-   git clone https://github.com/morroware/SensorsWithFlask.git
-   ```
+In cPanel → MySQL Databases:
+- Create a database (e.g., `youruser_sensors`)
+- Create a user with a strong password
+- Assign the user to the database with ALL PRIVILEGES
 
-2. Navigate to the cloned directory:
+### 2. Upload dashboard files
 
-   ```bash
-   cd SensorsWithFlask
-   ```
+Upload the entire `dashboard/` folder to your cPanel account, for example to `public_html/dashboard/`.
 
-3. Create a `templates` directory:
+### 3. Configure
 
-   ```bash
-   mkdir templates
-   ```
+Edit `dashboard/config.php`:
+```php
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'youruser_sensors');
+define('DB_USER', 'youruser_dbuser');
+define('DB_PASS', 'your_db_password');
+define('API_KEY', 'your-secret-api-key');  // Must match sensor configs
+define('RETENTION_DAYS', 90);
+define('APP_TIMEZONE', 'America/New_York');
+define('OFFLINE_MINUTES', 15);
+```
 
-4. Move the `settings.html` file into the `templates` directory:
+### 4. Install database tables
 
-   ```bash
-   mv settings.html templates
-   ```
+Visit `https://yourdomain.com/dashboard/install.php` once in your browser. This creates the required MySQL tables and writes a lock file so it cannot be re-run accidentally.
 
-5. Update the `SingleSensorSettings.conf` file with your specific settings:
+### 5. Access the dashboard
 
-   ```bash
-   nano SingleSensorSettings.conf
-   ```
+Visit `https://yourdomain.com/dashboard/` to see the live dashboard.
 
-6. Save and close the file.
+## Dashboard Features
 
-### Setting Up the Script to Run on Boot
+- **Sensor cards**: Current temperature, humidity, and CO2 for each sensor with online/offline status
+- **Temperature chart**: Line chart of all sensors over time (Chart.js)
+- **Humidity chart**: Line chart of all sensors over time
+- **CO2 chart**: Shown automatically when SCD40 sensors are present
+- **Time ranges**: 1H, 6H, 24H, 7D, 30D with automatic downsampling for large ranges
+- **Auto-refresh**: Dashboard updates every 60 seconds
+- **Data retention**: Automatically purges readings older than the configured retention period
+- **Dark theme**: Professional monitoring interface, responsive on mobile
 
-1. Open the crontab:
+## API Reference
 
-   ```bash
-   sudo crontab -e
-   ```
+### POST `/api/submit.php`
 
-2. Add the following line to the end of the file to run the script on boot:
+Ingest a sensor reading.
 
-   ```bash
-   @reboot python3 /path/to/your/SingleSensor.py
-   ```
+**Headers**: `X-API-Key: <your-key>`, `Content-Type: application/json`
 
-   Replace `/path/to/your/` with the actual path to the `SingleSensor.py` script.
+```json
+{
+    "sensor_id": "kitchen",
+    "sensor_type": "bme280",
+    "temperature_f": 72.5,
+    "temperature_c": 22.5,
+    "humidity": 45.2,
+    "co2": null
+}
+```
 
-3. Save and close the file.
+### GET `/api/sensors.php`
 
-## Usage
+Returns all sensors with their latest reading and online status.
 
-1. Run the `SingleSensor.py` script:
+### GET `/api/readings.php`
 
-   ```bash
-   python3 SingleSensor.py
-   ```
+Returns time-series data for charts.
 
-2. Access the settings interface via a web browser at `http://<your_pi_ip>:5000/settings`.
+| Parameter   | Default | Description |
+|-------------|---------|-------------|
+| `sensor_id` | `all`   | Comma-separated IDs or `all` |
+| `range`     | `24h`   | `1h`, `6h`, `24h`, `7d`, `30d` |
+| `start`     | —       | Custom start (ISO date) |
+| `end`       | —       | Custom end (ISO date) |
 
-**Note:** Make sure to replace `<your_pi_ip>` with the actual IP address of your Raspberry Pi.
+## File Structure
+
+```
+SingleBME280/
+├── SingleBME280.py              # Pi Zero sensor script
+├── SingleSensorSettings.conf    # Pi Zero config
+├── settings.html                # Pi Zero web settings UI
+├── readme.md
+└── dashboard/                   # Self-hosted on cPanel
+    ├── index.php                # Dashboard UI
+    ├── config.php               # Server configuration
+    ├── install.php              # One-time DB setup
+    ├── .htaccess                # Security rules
+    ├── api/
+    │   ├── submit.php           # Data ingestion endpoint
+    │   ├── readings.php         # Chart data endpoint
+    │   └── sensors.php          # Sensor listing endpoint
+    ├── includes/
+    │   └── db.php               # Database connection
+    └── assets/
+        ├── css/
+        │   └── style.css
+        └── js/
+            └── dashboard.js     # Chart.js frontend logic
+```
+
+## Security Notes
+
+- The API key is a shared secret between all sensors and the dashboard. Use a long random string.
+- The `.htaccess` file blocks direct access to `config.php`, `includes/`, and lock files.
+- Sensor settings (including Slack tokens) are stored in plaintext on each Pi. Secure physical access to your Pis.
+- The Pi settings web interface has no authentication. It is only accessible on your local network.
