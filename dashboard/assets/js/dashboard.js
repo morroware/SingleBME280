@@ -62,7 +62,7 @@
     function timeAgo(dateStr) {
         if (!dateStr) return 'Never';
         var now  = new Date();
-        var then = new Date(dateStr.replace(' ', 'T'));
+        var then = new Date(dateStr);  // ISO 8601 with timezone from server
         var diff = Math.floor((now - then) / 1000);
         if (isNaN(diff) || diff < 0) return 'Just now';
         if (diff < 60)    return diff + 's ago';
@@ -105,6 +105,27 @@
             max:     max,
             avg:     sum / nums.length,
         };
+    }
+
+    // -----------------------------------------------------------------------
+    // Error banner (non-blocking)
+    // -----------------------------------------------------------------------
+    function showError(msg) {
+        var el = document.getElementById('errorBanner');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'errorBanner';
+            el.style.cssText = 'background:#7f1d1d;color:#fca5a5;padding:8px 16px;text-align:center;' +
+                'font-size:0.85rem;position:sticky;top:56px;z-index:99;';
+            mainContent.parentNode.insertBefore(el, mainContent);
+        }
+        el.textContent = msg;
+        el.style.display = '';
+    }
+
+    function clearError() {
+        var el = document.getElementById('errorBanner');
+        if (el) el.style.display = 'none';
     }
 
     // -----------------------------------------------------------------------
@@ -367,7 +388,7 @@
                 var tempPts = [];
                 for (var k = 0; k < data.length; k++) {
                     if (data[k].temperature_f !== null) {
-                        tempPts.push({ x: new Date(data[k].time.replace(' ', 'T')), y: data[k].temperature_f });
+                        tempPts.push({ x: new Date(data[k].time), y: data[k].temperature_f });
                     }
                 }
                 if (tempPts.length > 0) createChart(tempCanvas, tempPts, 'temperature_f', '\u00B0F');
@@ -379,7 +400,7 @@
                 var humPts = [];
                 for (var m = 0; m < data.length; m++) {
                     if (data[m].humidity !== null) {
-                        humPts.push({ x: new Date(data[m].time.replace(' ', 'T')), y: data[m].humidity });
+                        humPts.push({ x: new Date(data[m].time), y: data[m].humidity });
                     }
                 }
                 if (humPts.length > 0) createChart(humCanvas, humPts, 'humidity', '%');
@@ -392,7 +413,7 @@
                     var co2Pts = [];
                     for (var n = 0; n < data.length; n++) {
                         if (data[n].co2 !== null) {
-                            co2Pts.push({ x: new Date(data[n].time.replace(' ', 'T')), y: data[n].co2 });
+                            co2Pts.push({ x: new Date(data[n].time), y: data[n].co2 });
                         }
                     }
                     if (co2Pts.length > 0) createChart(co2Canvas, co2Pts, 'co2', ' ppm');
@@ -421,15 +442,19 @@
         Promise.all([sensorsReq, readingsReq])
             .then(function (results) {
                 render(results[0], results[1]);
+                clearError();
             })
             .catch(function (err) {
                 console.error('Dashboard fetch error:', err);
-                // Only overwrite if still showing loading spinner
+                // First load: replace spinner with full error
                 if (globalLoading && globalLoading.parentNode === mainContent) {
                     mainContent.innerHTML = '<div class="empty-state">' +
                         '<p style="font-size:1.1rem;margin-bottom:8px;">Unable to load sensor data.</p>' +
                         '<p>Check your database settings in <code>config.php</code> and ensure <code>install.php</code> has been run.</p>' +
                     '</div>';
+                } else {
+                    // Subsequent load: show a non-blocking error banner
+                    showError('Failed to refresh data. Retrying in 60s\u2026');
                 }
             })
             .finally(function () {

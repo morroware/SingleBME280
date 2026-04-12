@@ -73,8 +73,6 @@ pip3 install flask adafruit-circuitpython-scd4x slack_sdk configparser
 ```bash
 git clone https://github.com/morroware/SingleBME280.git
 cd SingleBME280
-mkdir -p templates
-cp settings.html templates/
 ```
 
 Edit `SingleSensorSettings.conf`:
@@ -196,7 +194,8 @@ Returns time-series data for charts.
 SingleBME280/
 ├── SingleBME280.py              # Pi Zero sensor script
 ├── SingleSensorSettings.conf    # Pi Zero config
-├── settings.html                # Pi Zero web settings UI
+├── templates/
+│   └── settings.html            # Pi Zero web settings UI (Flask template)
 ├── readme.md
 └── dashboard/                   # Self-hosted on cPanel
     ├── index.php                # Dashboard UI

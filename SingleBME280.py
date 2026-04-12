@@ -18,6 +18,11 @@ import signal
 import json
 from logging.handlers import RotatingFileHandler
 
+# Pin working directory to the script's own folder so relative paths work
+# regardless of how the process is launched (cron, systemd, etc.)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(_SCRIPT_DIR)
+
 # Conditional imports for sensors - only loaded when needed
 smbus2 = None
 bme280 = None
@@ -45,10 +50,25 @@ logger.addHandler(logging.StreamHandler())
 LOG_FILE = "sensor_readings.log"
 ERROR_LOG_FILE = "error_log.log"
 
+# Rotating file handlers for the two data/error logs so they don't fill the SD card.
+# 2 MB each, 2 backups = max ~6 MB per log.
+_readings_handler = RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=2)
+_readings_handler.setFormatter(logging.Formatter('%(message)s'))
+_readings_logger = logging.getLogger('readings')
+_readings_logger.setLevel(logging.INFO)
+_readings_logger.addHandler(_readings_handler)
+
+_error_handler = RotatingFileHandler(ERROR_LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=2)
+_error_handler.setFormatter(logging.Formatter('%(message)s'))
+_error_logger = logging.getLogger('errors')
+_error_logger.setLevel(logging.ERROR)
+_error_logger.addHandler(_error_handler)
+
 # ---------------------------------------------------------------------------
 # Global state
 # ---------------------------------------------------------------------------
 shutdown_event = Event()
+monitoring_error = None  # Set by monitoring thread if init fails
 
 alert_states = {
     'high_temp': False,
@@ -64,13 +84,9 @@ alert_counters = {
 # Helpers
 # ---------------------------------------------------------------------------
 def log_error(message):
-    """Log error messages to file and console."""
-    try:
-        with open(ERROR_LOG_FILE, 'a') as fh:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            fh.write(f"{timestamp} - ERROR: {message}\n")
-    except OSError:
-        pass
+    """Log error messages to rotating error log and console."""
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    _error_logger.error(f"{timestamp} - ERROR: {message}")
     logger.error(message)
 
 
@@ -133,19 +149,25 @@ def read_settings_from_conf(conf_file):
     except configparser.NoOptionError:
         settings['BME280_ADDRESS'] = '0x76'
 
+    # Validate critical values
+    if settings['MINUTES_BETWEEN_READS'] < 1:
+        settings['MINUTES_BETWEEN_READS'] = 1
+        logger.warning("MINUTES_BETWEEN_READS was < 1, clamped to 1.")
+
+    if not settings['SENSOR_LOCATION_NAME'].strip():
+        raise ValueError("SENSOR_LOCATION_NAME must not be empty.")
+
     return settings
 
 
 # ---------------------------------------------------------------------------
 # Slack alerts
 # ---------------------------------------------------------------------------
-def send_slack_alert(message):
+def send_slack_alert(message, settings):
     """Send alert to Slack channel. Fails silently on import/network errors."""
     try:
         from slack_sdk import WebClient
-        from slack_sdk.errors import SlackApiError
 
-        settings = read_settings_from_conf(CONF_FILE)
         token = settings['SLACK_API_TOKEN']
         channel = settings['SLACK_CHANNEL']
 
@@ -338,6 +360,14 @@ def home():
     return redirect('/settings')
 
 
+@app.route('/status')
+def status_route():
+    """Quick health check – shows whether monitoring is running."""
+    if monitoring_error:
+        return jsonify(status='error', message=monitoring_error), 503
+    return jsonify(status='ok'), 200
+
+
 @app.route('/settings', methods=['GET', 'POST'])
 def settings_route():
     conf_file = CONF_FILE
@@ -395,14 +425,15 @@ def reboot_system():
 # Main monitoring loop
 # ---------------------------------------------------------------------------
 def run_monitoring():
-    global alert_states, alert_counters
+    global alert_states, alert_counters, monitoring_error
 
     # Read settings
     try:
         settings = read_settings_from_conf(CONF_FILE)
     except Exception as e:
         log_error(f"Failed to read settings: {e}")
-        sys.exit(1)
+        monitoring_error = str(e)
+        return
 
     # Initialise sensor
     try:
@@ -413,7 +444,8 @@ def run_monitoring():
         logger.info(f"Sensor active: {detected_type}")
     except Exception as e:
         log_error(f"Failed to initialise sensor: {e}")
-        sys.exit(1)
+        monitoring_error = str(e)
+        return
 
     minutes_between_reads = settings['MINUTES_BETWEEN_READS']
     last_read_time = 0
@@ -451,7 +483,7 @@ def run_monitoring():
                                 f"High temp alert at {settings['SENSOR_LOCATION_NAME']}: "
                                 f"{temp_f:.1f}F ({temp_c:.1f}C)"
                             )
-                            send_slack_alert(msg)
+                            send_slack_alert(msg, settings)
                             alert_states['high_temp'] = True
                     else:
                         alert_counters['high_temp'] = 0
@@ -460,7 +492,7 @@ def run_monitoring():
                                 f"Temp normal at {settings['SENSOR_LOCATION_NAME']}: "
                                 f"{temp_f:.1f}F ({temp_c:.1f}C)"
                             )
-                            send_slack_alert(msg)
+                            send_slack_alert(msg, settings)
                             alert_states['high_temp'] = False
 
                     # --- Low temperature alert ---
@@ -472,7 +504,7 @@ def run_monitoring():
                                 f"Low temp alert at {settings['SENSOR_LOCATION_NAME']}: "
                                 f"{temp_f:.1f}F ({temp_c:.1f}C)"
                             )
-                            send_slack_alert(msg)
+                            send_slack_alert(msg, settings)
                             alert_states['low_temp'] = True
                     else:
                         alert_counters['low_temp'] = 0
@@ -481,17 +513,16 @@ def run_monitoring():
                                 f"Temp normal at {settings['SENSOR_LOCATION_NAME']}: "
                                 f"{temp_f:.1f}F ({temp_c:.1f}C)"
                             )
-                            send_slack_alert(msg)
+                            send_slack_alert(msg, settings)
                             alert_states['low_temp'] = False
 
-                    # --- Log locally ---
-                    with open(LOG_FILE, 'a') as fh:
-                        ts = time.strftime('%Y-%m-%d %H:%M:%S')
-                        hum_str = f", Humidity: {humidity:.1f}%" if humidity is not None else ""
-                        fh.write(
-                            f"{ts} - {settings['SENSOR_LOCATION_NAME']} - "
-                            f"Temp: {temp_f:.2f}F{hum_str}{co2_str}\n"
-                        )
+                    # --- Log locally (rotating) ---
+                    ts = time.strftime('%Y-%m-%d %H:%M:%S')
+                    hum_str = f", Humidity: {humidity:.1f}%" if humidity is not None else ""
+                    _readings_logger.info(
+                        f"{ts} - {settings['SENSOR_LOCATION_NAME']} - "
+                        f"Temp: {temp_f:.2f}F{hum_str}{co2_str}"
+                    )
 
                     # --- Send to dashboard ---
                     send_to_dashboard(settings, temp_f, temp_c, humidity, co2,
@@ -514,6 +545,9 @@ def run_monitoring():
 def signal_handler(signum, frame):
     logger.info("Shutdown signal received. Cleaning up...")
     shutdown_event.set()
+    # Raise SystemExit so Flask's serving loop actually stops.
+    # Without this, Flask keeps running even though the event is set.
+    raise SystemExit(0)
 
 
 if __name__ == '__main__':
@@ -527,6 +561,8 @@ if __name__ == '__main__':
         port = find_available_port(5000)
         logger.info(f"Starting Flask on port {port}...")
         app.run(host='0.0.0.0', port=port, debug=False)
+    except SystemExit:
+        pass  # Expected from signal_handler
     except Exception as e:
         log_error(f"Error starting server: {e}")
     finally:

@@ -133,7 +133,8 @@ try {
         $types[$typeRow['sensor_id']] = $typeRow['sensor_type'];
     }
 
-    // Group rows by sensor
+    // Group rows by sensor, converting timestamps to ISO 8601 with timezone
+    $tz = new DateTimeZone(APP_TIMEZONE);
     $result = [];
     foreach ($rows as $row) {
         $sid = $row['sensor_id'];
@@ -143,8 +144,9 @@ try {
                 'data'        => [],
             ];
         }
+        $isoTime = (new DateTime($row['time'], $tz))->format('c');
         $result[$sid]['data'][] = [
-            'time'          => $row['time'],
+            'time'          => $isoTime,
             'temperature_f' => $row['temperature_f'] !== null ? (float)$row['temperature_f'] : null,
             'temperature_c' => $row['temperature_c'] !== null ? (float)$row['temperature_c'] : null,
             'humidity'      => $row['humidity'] !== null ? (float)$row['humidity'] : null,
