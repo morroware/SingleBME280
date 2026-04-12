@@ -1,4 +1,4 @@
-# Deny access to config and include files
+# Deny access to config, lock, and sensitive PHP files
 <FilesMatch "\.(conf|lock)$">
     <IfModule mod_authz_core.c>
         Require all denied
@@ -8,6 +8,17 @@
         Deny from all
     </IfModule>
 </FilesMatch>
+
+# Block direct access to config.php (contains DB credentials)
+<Files "config.php">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</Files>
 
 # Deny access to includes directory
 <IfModule mod_rewrite.c>

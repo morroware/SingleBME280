@@ -17,15 +17,14 @@ try {
     $db = get_db();
     $offlineMinutes = (int)OFFLINE_MINUTES;
 
-    // Step 1: Fetch latest reading ID per sensor in a single pass
-    // This is much faster than a correlated subquery for each sensor row.
+    // Fetch latest reading ID per sensor in a single pass
     $sql = "
         SELECT
             s.sensor_id,
             s.sensor_type,
             s.location_name,
             s.last_seen,
-            s.last_seen > DATE_SUB(NOW(), INTERVAL {$offlineMinutes} MINUTE) AS is_online,
+            s.last_seen > DATE_SUB(NOW(), INTERVAL :offline MINUTE) AS is_online,
             r.temperature_f,
             r.temperature_c,
             r.humidity,
@@ -41,16 +40,22 @@ try {
         ORDER BY s.location_name ASC, s.sensor_id ASC
     ";
 
-    $stmt = $db->query($sql);
+    $stmt = $db->prepare($sql);
+    $stmt->execute([':offline' => $offlineMinutes]);
     $rows = $stmt->fetchAll();
 
     $sensors = [];
     foreach ($rows as $row) {
+        // Convert last_seen to ISO 8601 with timezone so JS can compare correctly
+        $lastSeen = $row['last_seen']
+            ? (new DateTime($row['last_seen'], new DateTimeZone(APP_TIMEZONE)))->format('c')
+            : null;
+
         $sensors[] = [
             'sensor_id'     => $row['sensor_id'],
             'sensor_type'   => $row['sensor_type'],
             'location_name' => $row['location_name'],
-            'last_seen'     => $row['last_seen'],
+            'last_seen'     => $lastSeen,
             'online'        => (bool)$row['is_online'],
             'latest' => [
                 'temperature_f' => $row['temperature_f'] !== null ? (float)$row['temperature_f'] : null,
