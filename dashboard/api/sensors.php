@@ -23,6 +23,7 @@ try {
             s.sensor_id,
             s.sensor_type,
             s.location_name,
+            s.ip_address,
             s.last_seen,
             s.last_seen > DATE_SUB(NOW(), INTERVAL :offline MINUTE) AS is_online,
             r.temperature_f,
@@ -55,6 +56,7 @@ try {
             'sensor_id'     => $row['sensor_id'],
             'sensor_type'   => $row['sensor_type'],
             'location_name' => $row['location_name'],
+            'ip_address'    => $row['ip_address'] ?: null,
             'last_seen'     => $lastSeen,
             'online'        => (bool)$row['is_online'],
             'latest' => [

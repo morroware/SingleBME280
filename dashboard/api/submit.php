@@ -96,22 +96,31 @@ try {
     $db  = get_db();
     $now = date('Y-m-d H:i:s');
 
+    // Capture sensor IP (supports proxied and direct connections)
+    $ipAddress = isset($_SERVER['HTTP_X_FORWARDED_FOR'])
+        ? explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0]
+        : (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : null);
+    if ($ipAddress) $ipAddress = trim(substr($ipAddress, 0, 45));
+
     // Upsert sensor record (uses param references instead of deprecated VALUES())
     $stmt = $db->prepare("
-        INSERT INTO sensors (sensor_id, sensor_type, location_name, last_seen)
-        VALUES (:sid, :type, :loc, :seen)
+        INSERT INTO sensors (sensor_id, sensor_type, location_name, ip_address, last_seen)
+        VALUES (:sid, :type, :loc, :ip, :seen)
         ON DUPLICATE KEY UPDATE
             sensor_type   = :type2,
             location_name = :loc2,
+            ip_address    = :ip2,
             last_seen     = :seen2
     ");
     $stmt->execute([
         ':sid'   => $sensorId,
         ':type'  => $sensorType,
         ':loc'   => $sensorId,
+        ':ip'    => $ipAddress,
         ':seen'  => $now,
         ':type2' => $sensorType,
         ':loc2'  => $sensorId,
+        ':ip2'   => $ipAddress,
         ':seen2' => $now,
     ]);
 
