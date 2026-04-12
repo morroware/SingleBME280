@@ -26,8 +26,8 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/db.php';
 
 // --- Auth ---
-$apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
-if ($apiKey !== API_KEY) {
+$apiKey = isset($_SERVER['HTTP_X_API_KEY']) ? $_SERVER['HTTP_X_API_KEY'] : '';
+if (!hash_equals(API_KEY, $apiKey)) {
     http_response_code(401);
     echo json_encode(['status' => 'error', 'message' => 'Invalid API key']);
     exit;
@@ -42,32 +42,58 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // --- Parse body ---
 $raw = file_get_contents('php://input');
-$data = json_decode($raw, true);
+if ($raw === false || $raw === '') {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'Empty request body']);
+    exit;
+}
 
-if (!$data || empty($data['sensor_id'])) {
+$data = json_decode($raw, true);
+if (!is_array($data) || empty($data['sensor_id'])) {
     http_response_code(400);
     echo json_encode(['status' => 'error', 'message' => 'Missing or invalid JSON body']);
     exit;
 }
 
-$sensorId     = substr(trim($data['sensor_id']), 0, 100);
-$sensorType   = in_array($data['sensor_type'] ?? '', ['bme280', 'scd40']) ? $data['sensor_type'] : 'bme280';
+// --- Sanitise & validate ---
+$sensorId = substr(trim($data['sensor_id']), 0, 100);
+if ($sensorId === '') {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'sensor_id is required']);
+    exit;
+}
+
+$validTypes = ['bme280', 'scd40'];
+$sensorType = (isset($data['sensor_type']) && in_array($data['sensor_type'], $validTypes))
+    ? $data['sensor_type']
+    : 'bme280';
+
 $temperatureF = isset($data['temperature_f']) ? (float)$data['temperature_f'] : null;
 $temperatureC = isset($data['temperature_c']) ? (float)$data['temperature_c'] : null;
-$humidity     = isset($data['humidity'])      ? (float)$data['humidity']      : null;
-$co2          = isset($data['co2'])           ? (int)$data['co2']            : null;
+$humidity     = isset($data['humidity']) && $data['humidity'] !== null ? (float)$data['humidity'] : null;
+$co2          = isset($data['co2']) && $data['co2'] !== null ? (int)$data['co2'] : null;
 
-// Basic range validation
-if ($temperatureF !== null && ($temperatureF < -60 || $temperatureF > 200)) {
+// Range validation
+if ($temperatureF !== null && ($temperatureF < -80 || $temperatureF > 210)) {
     http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Temperature out of range']);
+    echo json_encode(['status' => 'error', 'message' => 'temperature_f out of range (-80 to 210)']);
+    exit;
+}
+if ($humidity !== null && ($humidity < 0 || $humidity > 100)) {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'humidity out of range (0-100)']);
+    exit;
+}
+if ($co2 !== null && ($co2 < 0 || $co2 > 40000)) {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'co2 out of range (0-40000)']);
     exit;
 }
 
 date_default_timezone_set(APP_TIMEZONE);
 
 try {
-    $db = get_db();
+    $db  = get_db();
     $now = date('Y-m-d H:i:s');
 
     // Upsert sensor record
@@ -109,4 +135,8 @@ try {
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => 'Database error']);
     error_log('submit.php DB error: ' . $e->getMessage());
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(['status' => 'error', 'message' => 'Server error']);
+    error_log('submit.php error: ' . $e->getMessage());
 }

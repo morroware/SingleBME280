@@ -1,17 +1,20 @@
-/* ===== Sensor Dashboard Styles ===== */
+/* ===== Sensor Dashboard – Per-Sensor Panel Layout ===== */
 
 :root {
     --bg-primary:    #1a1d23;
     --bg-secondary:  #22262e;
     --bg-card:       #2a2e38;
+    --bg-stat:       #1e2229;
     --border:        #363b47;
     --text-primary:  #e8eaed;
     --text-secondary:#9aa0a9;
+    --text-muted:    #6b7280;
     --accent-blue:   #4a9eff;
     --accent-green:  #34d399;
     --accent-red:    #f87171;
     --accent-amber:  #fbbf24;
     --accent-purple: #a78bfa;
+    --accent-orange: #fb923c;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,7 +26,7 @@ body {
     min-height: 100vh;
 }
 
-/* --- Top bar --- */
+/* ===== Top bar ===== */
 .topbar {
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
@@ -33,6 +36,9 @@ body {
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
 
 .topbar h1 {
@@ -48,7 +54,6 @@ body {
     flex-wrap: wrap;
 }
 
-/* --- Range buttons --- */
 .range-btn {
     background: var(--bg-card);
     color: var(--text-secondary);
@@ -96,154 +101,6 @@ body {
     to   { transform: rotate(360deg); }
 }
 
-/* --- Main content --- */
-.main {
-    padding: 20px 24px;
-    max-width: 1400px;
-    margin: 0 auto;
-}
-
-/* --- Sensor cards grid --- */
-.sensor-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 14px;
-    margin-bottom: 24px;
-}
-
-.sensor-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    transition: border-color 0.2s;
-}
-
-.sensor-card:hover {
-    border-color: var(--accent-blue);
-}
-
-.sensor-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.sensor-name {
-    font-weight: 600;
-    font-size: 0.95rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.sensor-badge {
-    font-size: 0.7rem;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-}
-
-.badge-bme280 {
-    background: rgba(74, 158, 255, 0.15);
-    color: var(--accent-blue);
-}
-
-.badge-scd40 {
-    background: rgba(167, 139, 250, 0.15);
-    color: var(--accent-purple);
-}
-
-.sensor-readings {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.reading-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.9rem;
-}
-
-.reading-label {
-    color: var(--text-secondary);
-}
-
-.reading-value {
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-}
-
-.reading-temp { color: var(--accent-amber); }
-.reading-hum  { color: var(--accent-blue); }
-.reading-co2  { color: var(--accent-purple); }
-
-.status-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
-.status-online  { background: var(--accent-green); }
-.status-offline { background: var(--accent-red); }
-
-.sensor-status {
-    display: flex;
-    align-items: center;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-}
-
-/* --- Chart panels --- */
-.chart-panel {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 20px;
-}
-
-.chart-panel h2 {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 14px;
-    color: var(--text-secondary);
-}
-
-.chart-container {
-    position: relative;
-    width: 100%;
-    height: 280px;
-}
-
-/* --- Loading / empty states --- */
-.loading-state,
-.empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-secondary);
-}
-
-.loading-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent-blue);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 12px;
-}
-
-/* --- Auto-refresh indicator --- */
 .auto-refresh {
     font-size: 0.75rem;
     color: var(--text-secondary);
@@ -265,15 +122,269 @@ body {
     50%      { opacity: 0.3; }
 }
 
-/* --- Responsive --- */
+/* ===== Main content ===== */
+.main {
+    padding: 20px 24px;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+/* ===== Loading / empty states ===== */
+.loading-state,
+.empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text-secondary);
+}
+
+.loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 14px;
+}
+
+/* ===== Sensor overview strip ===== */
+.overview-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+}
+
+.overview-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.overview-card:hover {
+    border-color: var(--accent-blue);
+}
+
+.overview-card.offline {
+    opacity: 0.6;
+}
+
+.overview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.overview-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 70%;
+}
+
+.sensor-badge {
+    font-size: 0.65rem;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.badge-bme280 {
+    background: rgba(74, 158, 255, 0.15);
+    color: var(--accent-blue);
+}
+
+.badge-scd40 {
+    background: rgba(167, 139, 250, 0.15);
+    color: var(--accent-purple);
+}
+
+.overview-values {
+    display: flex;
+    gap: 12px;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.ov-temp  { color: var(--accent-amber); font-weight: 600; }
+.ov-hum   { color: var(--accent-blue); font-weight: 600; }
+.ov-co2   { color: var(--accent-purple); font-weight: 600; }
+
+.overview-status {
+    display: flex;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 5px;
+    flex-shrink: 0;
+}
+
+.status-online  { background: var(--accent-green); }
+.status-offline { background: var(--accent-red); }
+
+/* ===== Per-sensor panel ===== */
+.sensor-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+.panel-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.panel-status {
+    display: flex;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.panel-last-seen {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+/* ===== Chart blocks inside a panel ===== */
+.panel-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 0;
+}
+
+.chart-block {
+    padding: 16px 20px 20px;
+    border-right: 1px solid var(--border);
+    min-width: 0;
+}
+
+.chart-block:last-child {
+    border-right: none;
+}
+
+.chart-block-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+}
+
+/* Stats row: current, min, max, avg */
+.chart-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.stat-value-sm {
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+}
+
+.stat-temp .stat-value,
+.stat-temp .stat-value-sm { color: var(--accent-amber); }
+
+.stat-hum .stat-value,
+.stat-hum .stat-value-sm  { color: var(--accent-blue); }
+
+.stat-co2 .stat-value,
+.stat-co2 .stat-value-sm  { color: var(--accent-purple); }
+
+/* Chart canvas container */
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 220px;
+}
+
+/* No-data state inside a chart block */
+.chart-nodata {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 220px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+    .panel-charts {
+        grid-template-columns: 1fr;
+    }
+    .chart-block {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .chart-block:last-child {
+        border-bottom: none;
+    }
+}
+
 @media (max-width: 768px) {
     .topbar { padding: 10px 14px; }
     .main   { padding: 14px; }
-    .sensor-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-    .chart-container { height: 220px; }
+    .overview-strip { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+    .chart-container { height: 180px; }
     .range-btn { padding: 5px 10px; font-size: 0.8rem; }
+    .stat-value { font-size: 1.15rem; }
 }
 
 @media (max-width: 480px) {
-    .sensor-grid { grid-template-columns: 1fr 1fr; }
+    .overview-strip { grid-template-columns: 1fr 1fr; }
+    .chart-stats { gap: 10px; }
 }

@@ -29,38 +29,11 @@
     </div>
 </div>
 
-<!-- Main -->
-<div class="main">
-    <!-- Sensor cards -->
-    <div class="sensor-grid" id="sensorGrid">
-        <div class="loading-state">
-            <div class="loading-spinner"></div>
-            <div>Loading sensors...</div>
-        </div>
-    </div>
-
-    <!-- Temperature chart -->
-    <div class="chart-panel">
-        <h2>Temperature (&deg;F)</h2>
-        <div class="chart-container">
-            <canvas id="tempChart"></canvas>
-        </div>
-    </div>
-
-    <!-- Humidity chart -->
-    <div class="chart-panel">
-        <h2>Humidity (%)</h2>
-        <div class="chart-container">
-            <canvas id="humChart"></canvas>
-        </div>
-    </div>
-
-    <!-- CO2 chart (SCD40 only) -->
-    <div class="chart-panel" id="co2Panel" style="display:none;">
-        <h2>CO&#8322; (ppm) &mdash; SCD40 Sensors</h2>
-        <div class="chart-container">
-            <canvas id="co2Chart"></canvas>
-        </div>
+<!-- Main content: dynamically populated by JS -->
+<div class="main" id="mainContent">
+    <div class="loading-state" id="globalLoading">
+        <div class="loading-spinner"></div>
+        <div>Loading sensors...</div>
     </div>
 </div>
 
