@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.pyc
+
+# Logs (generated at runtime on Pi)
+*.log
+
+# Runtime files
+install.lock
