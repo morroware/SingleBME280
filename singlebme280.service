@@ -1,0 +1,17 @@
+[Unit]
+Description=SingleBME280 Sensor Monitoring
+After=multi-user.target network.target
+
+[Service]
+Type=simple
+User=tech
+WorkingDirectory=/home/tech/SingleBME280
+ExecStartPre=/bin/sleep 15
+ExecStart=/usr/bin/python3 /home/tech/SingleBME280/SingleBME280.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/tech/sensor.log
+StandardError=append:/home/tech/sensor.log
+
+[Install]
+WantedBy=multi-user.target
