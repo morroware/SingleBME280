@@ -96,20 +96,23 @@ try {
     $db  = get_db();
     $now = date('Y-m-d H:i:s');
 
-    // Upsert sensor record
+    // Upsert sensor record (uses param references instead of deprecated VALUES())
     $stmt = $db->prepare("
         INSERT INTO sensors (sensor_id, sensor_type, location_name, last_seen)
         VALUES (:sid, :type, :loc, :seen)
         ON DUPLICATE KEY UPDATE
-            sensor_type   = VALUES(sensor_type),
-            location_name = VALUES(location_name),
-            last_seen     = VALUES(last_seen)
+            sensor_type   = :type2,
+            location_name = :loc2,
+            last_seen     = :seen2
     ");
     $stmt->execute([
-        ':sid'  => $sensorId,
-        ':type' => $sensorType,
-        ':loc'  => $sensorId,
-        ':seen' => $now,
+        ':sid'   => $sensorId,
+        ':type'  => $sensorType,
+        ':loc'   => $sensorId,
+        ':seen'  => $now,
+        ':type2' => $sensorType,
+        ':loc2'  => $sensorId,
+        ':seen2' => $now,
     ]);
 
     // Insert reading

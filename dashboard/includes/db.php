@@ -32,8 +32,8 @@ function maybe_cleanup(): void {
     }
     try {
         $db = get_db();
-        $days = RETENTION_DAYS;
-        $db->exec("DELETE FROM readings WHERE recorded_at < DATE_SUB(NOW(), INTERVAL {$days} DAY)");
+        $stmt = $db->prepare("DELETE FROM readings WHERE recorded_at < DATE_SUB(NOW(), INTERVAL :days DAY)");
+        $stmt->execute([':days' => (int)RETENTION_DAYS]);
     } catch (Exception $e) {
         // Silently ignore cleanup failures – they'll retry next time.
     }
