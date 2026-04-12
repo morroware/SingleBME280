@@ -96,33 +96,59 @@ try {
     $db  = get_db();
     $now = date('Y-m-d H:i:s');
 
-    // Capture sensor IP (supports proxied and direct connections)
-    $ipAddress = isset($_SERVER['HTTP_X_FORWARDED_FOR'])
-        ? explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0]
-        : (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : null);
-    if ($ipAddress) $ipAddress = trim(substr($ipAddress, 0, 45));
+    // Prefer local_ip sent by the sensor (LAN address like 192.168.x.x).
+    // Fall back to REMOTE_ADDR only if the sensor didn't send its own.
+    $ipAddress = null;
+    if (!empty($data['local_ip']) && filter_var($data['local_ip'], FILTER_VALIDATE_IP)) {
+        $ipAddress = trim(substr($data['local_ip'], 0, 45));
+    }
 
-    // Upsert sensor record (uses param references instead of deprecated VALUES())
-    $stmt = $db->prepare("
-        INSERT INTO sensors (sensor_id, sensor_type, location_name, ip_address, last_seen)
-        VALUES (:sid, :type, :loc, :ip, :seen)
-        ON DUPLICATE KEY UPDATE
-            sensor_type   = :type2,
-            location_name = :loc2,
-            ip_address    = :ip2,
-            last_seen     = :seen2
-    ");
-    $stmt->execute([
-        ':sid'   => $sensorId,
-        ':type'  => $sensorType,
-        ':loc'   => $sensorId,
-        ':ip'    => $ipAddress,
-        ':seen'  => $now,
-        ':type2' => $sensorType,
-        ':loc2'  => $sensorId,
-        ':ip2'   => $ipAddress,
-        ':seen2' => $now,
-    ]);
+    // Only update IP if the sensor sent one; preserve any manually-set value otherwise.
+    // We'll use a flag to skip the ip_address update when there's nothing new.
+    $updateIp = ($ipAddress !== null);
+
+    // Upsert sensor record
+    if ($updateIp) {
+        $stmt = $db->prepare("
+            INSERT INTO sensors (sensor_id, sensor_type, location_name, ip_address, last_seen)
+            VALUES (:sid, :type, :loc, :ip, :seen)
+            ON DUPLICATE KEY UPDATE
+                sensor_type   = :type2,
+                location_name = :loc2,
+                ip_address    = :ip2,
+                last_seen     = :seen2
+        ");
+        $stmt->execute([
+            ':sid'   => $sensorId,
+            ':type'  => $sensorType,
+            ':loc'   => $sensorId,
+            ':ip'    => $ipAddress,
+            ':seen'  => $now,
+            ':type2' => $sensorType,
+            ':loc2'  => $sensorId,
+            ':ip2'   => $ipAddress,
+            ':seen2' => $now,
+        ]);
+    } else {
+        // No local_ip provided – don't overwrite a manually-set IP
+        $stmt = $db->prepare("
+            INSERT INTO sensors (sensor_id, sensor_type, location_name, last_seen)
+            VALUES (:sid, :type, :loc, :seen)
+            ON DUPLICATE KEY UPDATE
+                sensor_type   = :type2,
+                location_name = :loc2,
+                last_seen     = :seen2
+        ");
+        $stmt->execute([
+            ':sid'   => $sensorId,
+            ':type'  => $sensorType,
+            ':loc'   => $sensorId,
+            ':seen'  => $now,
+            ':type2' => $sensorType,
+            ':loc2'  => $sensorId,
+            ':seen2' => $now,
+        ]);
+    }
 
     // Insert reading
     $stmt = $db->prepare("

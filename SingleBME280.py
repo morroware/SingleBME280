@@ -94,6 +94,18 @@ def celsius_to_fahrenheit(celsius):
     return (celsius * 9 / 5) + 32
 
 
+def get_local_ip():
+    """Return this device's LAN IP (e.g. 192.168.x.x) without sending traffic."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return None
+
+
 def find_available_port(start_port=5000, max_attempts=100):
     for port in range(start_port, start_port + max_attempts):
         try:
@@ -212,6 +224,7 @@ def send_to_dashboard(settings, temperature_f, temperature_c, humidity, co2=None
         'temperature_c': round(temperature_c, 2),
         'humidity': round(humidity, 2) if humidity is not None else None,
         'co2': int(co2) if co2 is not None else None,
+        'local_ip': get_local_ip(),
     }
 
     data = json.dumps(payload).encode('utf-8')

@@ -708,10 +708,53 @@ body {
     color: var(--text-muted);
 }
 
+.manage-sensor-ip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.ip-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.ip-input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    width: 140px;
+    transition: border-color var(--transition);
+}
+
+.ip-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+.ip-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+.ip-save-btn {
+    white-space: nowrap;
+}
+
 .manage-sensor-actions {
     display: flex;
     gap: 6px;
     flex-shrink: 0;
+    align-self: flex-start;
+    padding-top: 2px;
 }
 
 /* ===== Buttons ===== */

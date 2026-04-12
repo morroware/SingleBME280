@@ -632,13 +632,18 @@
                 html += '<div class="manage-sensor-meta">';
                 html += '<span class="status-dot ' + onClass + '" style="display:inline-block;margin-right:4px;"></span>';
                 html += onText + ' \u00B7 ' + esc(s.sensor_type).toUpperCase() + ' \u00B7 Last seen ' + timeAgo(s.last_seen);
-                if (s.ip_address) html += ' \u00B7 ' + esc(s.ip_address);
                 html += '</div>';
-                html += '</div>';
-                html += '<div class="manage-sensor-actions">';
+                // Editable IP row
+                html += '<div class="manage-sensor-ip">';
+                html += '<label class="ip-label">Local IP</label>';
+                html += '<input type="text" class="ip-input" data-sensor-ip="' + esc(s.sensor_id) + '" value="' + esc(s.ip_address || '') + '" placeholder="192.168.1.x">';
+                html += '<button class="btn btn-sm btn-secondary ip-save-btn" data-save-ip="' + esc(s.sensor_id) + '">Save</button>';
                 if (url) {
                     html += '<a class="btn-link" href="' + esc(url) + '" target="_blank">Open</a>';
                 }
+                html += '</div>';
+                html += '</div>';
+                html += '<div class="manage-sensor-actions">';
                 html += '<button class="btn btn-danger btn-sm" data-delete-sensor="' + esc(s.sensor_id) + '" data-delete-name="' + esc(s.location_name) + '">Remove</button>';
                 html += '</div>';
                 html += '</div>';
@@ -654,8 +659,93 @@
                     deleteModal.classList.add('visible');
                 });
             }
+
+            // Bind IP save buttons
+            var saveBtns = manageModalBody.querySelectorAll('[data-save-ip]');
+            for (var k = 0; k < saveBtns.length; k++) {
+                saveBtns[k].addEventListener('click', function () {
+                    var sid = this.getAttribute('data-save-ip');
+                    var input = manageModalBody.querySelector('[data-sensor-ip="' + sid + '"]');
+                    var ip = input ? input.value.trim() : '';
+                    var btn = this;
+                    saveIpAddress(sid, ip, btn);
+                });
+            }
+
+            // Also allow Enter key in IP inputs
+            var ipInputs = manageModalBody.querySelectorAll('.ip-input');
+            for (var m = 0; m < ipInputs.length; m++) {
+                ipInputs[m].addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        var sid = this.getAttribute('data-sensor-ip');
+                        var saveBtn = manageModalBody.querySelector('[data-save-ip="' + sid + '"]');
+                        if (saveBtn) saveBtn.click();
+                    }
+                });
+            }
         }
         manageModal.classList.add('visible');
+    }
+
+    function saveIpAddress(sensorId, ip, btn) {
+        var origText = btn.textContent;
+        btn.textContent = 'Saving...';
+        btn.disabled = true;
+
+        fetch('api/update_sensor.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': getApiKey(),
+            },
+            body: JSON.stringify({ sensor_id: sensorId, ip_address: ip }),
+        })
+        .then(function (r) {
+            if (!r.ok) throw new Error('Update failed: ' + r.status);
+            return r.json();
+        })
+        .then(function () {
+            btn.textContent = 'Saved!';
+            btn.style.color = 'var(--accent-green)';
+            // Update cached data so links update immediately
+            for (var i = 0; i < cachedSensors.length; i++) {
+                if (cachedSensors[i].sensor_id === sensorId) {
+                    cachedSensors[i].ip_address = ip || null;
+                    break;
+                }
+            }
+            setTimeout(function () {
+                btn.textContent = origText;
+                btn.style.color = '';
+                btn.disabled = false;
+                // Re-render the "Open" link in the modal row
+                var row = btn.closest('.manage-sensor-ip');
+                var existingLink = row.querySelector('.btn-link');
+                var newUrl = ip ? 'http://' + ip + ':' + SENSOR_PORT : null;
+                if (existingLink && !newUrl) existingLink.remove();
+                else if (newUrl && !existingLink) {
+                    var a = document.createElement('a');
+                    a.className = 'btn-link';
+                    a.href = newUrl;
+                    a.target = '_blank';
+                    a.textContent = 'Open';
+                    row.appendChild(a);
+                } else if (existingLink && newUrl) {
+                    existingLink.href = newUrl;
+                }
+            }, 1500);
+        })
+        .catch(function (err) {
+            console.error('Save IP error:', err);
+            btn.textContent = 'Error';
+            btn.style.color = 'var(--accent-red)';
+            setTimeout(function () {
+                btn.textContent = origText;
+                btn.style.color = '';
+                btn.disabled = false;
+            }, 2000);
+        });
     }
 
     function closeManageModal() {
