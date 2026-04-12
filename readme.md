@@ -94,13 +94,10 @@ bme280_address = 0x76                 # 0x76 or 0x77
 ### 3. Run on boot (systemd)
 
 ```bash
-sudo cp singlebme280.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable singlebme280
-sudo systemctl start singlebme280
+sudo bash install.sh
 ```
 
-Edit the service file first if your user or install path differs from `/home/tech/SingleBME280`.
+The install script automatically detects your user and install path, generates the systemd service, removes any old `@reboot` cron entries, and starts the service.
 
 Check status:
 ```bash
@@ -108,7 +105,7 @@ sudo systemctl status singlebme280
 journalctl -u singlebme280 -f
 ```
 
-> **Note:** The service waits 15 seconds before starting to ensure I2C and networking are ready. If you were previously using `@reboot` in crontab, remove that entry to avoid running two instances.
+> **Note:** The service waits 15 seconds before starting to ensure I2C and networking are ready.
 
 ### 4. Test
 
@@ -204,6 +201,7 @@ SingleBME280/
 ├── SingleBME280.py              # Pi Zero sensor script
 ├── SingleSensorSettings.conf    # Pi Zero config
 ├── singlebme280.service         # systemd unit for auto-start on boot
+├── install.sh                   # One-command installer for the systemd service
 ├── templates/
 │   └── settings.html            # Pi Zero web settings UI (Flask template)
 ├── readme.md
