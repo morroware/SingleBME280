@@ -37,11 +37,20 @@ try {
             sensor_id     VARCHAR(100) NOT NULL UNIQUE,
             sensor_type   VARCHAR(20)  NOT NULL DEFAULT 'bme280',
             location_name VARCHAR(255) NOT NULL DEFAULT '',
+            ip_address    VARCHAR(45)  NULL,
             last_seen     DATETIME     NULL,
             created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
     $success[] = 'Created table: sensors';
+
+    // Add ip_address column if upgrading from older schema
+    try {
+        $pdo->exec("ALTER TABLE sensors ADD COLUMN ip_address VARCHAR(45) NULL AFTER location_name");
+        $success[] = 'Added column: sensors.ip_address';
+    } catch (PDOException $e) {
+        // Column likely already exists – ignore
+    }
 
     // --- readings table ---
     $pdo->exec("
