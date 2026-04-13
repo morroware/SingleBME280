@@ -857,3 +857,261 @@ body {
     .panel-meta { gap: 6px; }
     .topbar-controls { gap: 8px; }
 }
+
+/* ===================================================================
+   Customizable dashboard: edit mode, drag-and-drop, per-feed controls
+   =================================================================== */
+
+/* Customize toggle button with label */
+.icon-btn.edit-toggle-btn {
+    padding: 6px 10px;
+    gap: 6px;
+}
+.icon-btn-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+.icon-btn.edit-toggle-btn.active {
+    color: var(--accent-blue);
+    background: rgba(74, 158, 255, 0.12);
+    border-color: rgba(74, 158, 255, 0.35);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.08);
+}
+.icon-btn.edit-toggle-btn.active:hover {
+    background: rgba(74, 158, 255, 0.18);
+}
+
+/* Edit-mode banner */
+.edit-banner {
+    display: none;
+    position: sticky;
+    top: 56px;
+    z-index: 90;
+    padding: 10px 24px;
+    background: linear-gradient(90deg, rgba(74,158,255,0.12), rgba(167,139,250,0.12));
+    border-bottom: 1px solid rgba(74,158,255,0.35);
+    backdrop-filter: blur(8px);
+}
+.edit-banner.visible { display: block; }
+.edit-banner-inner {
+    max-width: 1600px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+.edit-banner-inner svg { color: var(--accent-blue); flex-shrink: 0; }
+.edit-banner-inner strong { color: var(--text-primary); font-weight: 700; }
+.edit-banner-done {
+    margin-left: auto;
+    background: var(--accent-blue);
+    color: #fff;
+    border: none;
+    padding: 5px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+.edit-banner-done:hover { background: #66aeff; transform: translateY(-1px); }
+
+/* Subtle body tint while editing */
+body.edit-mode-on .main {
+    position: relative;
+}
+
+/* Sensor panels wrapper (for DnD container) */
+.sensor-panels { display: block; }
+
+/* Panel-level edit affordances */
+.sensor-panel.edit-mode {
+    border-color: var(--border-light);
+    box-shadow: 0 0 0 1px rgba(74,158,255,0.08);
+}
+.sensor-panel.edit-mode .panel-header {
+    cursor: grab;
+    background: linear-gradient(90deg, rgba(74,158,255,0.04), transparent);
+}
+.sensor-panel.edit-mode .panel-header:active { cursor: grabbing; }
+.sensor-panel.dragging {
+    opacity: 0.55;
+    transform: scale(0.995);
+    outline: 2px dashed var(--accent-blue);
+    outline-offset: -2px;
+}
+
+/* Drag handle (generic) */
+.drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: grab;
+    flex-shrink: 0;
+    transition: all var(--transition);
+}
+.drag-handle:hover {
+    color: var(--accent-blue);
+    background: rgba(74,158,255,0.1);
+}
+.drag-handle:active { cursor: grabbing; }
+
+/* Feed (chart-block) level */
+.chart-block {
+    position: relative;
+    transition: box-shadow var(--transition), transform var(--transition), background var(--transition);
+}
+.chart-block.edit-mode {
+    cursor: grab;
+    background: rgba(255,255,255,0.015);
+}
+.chart-block.edit-mode:hover { background: rgba(255,255,255,0.03); }
+.chart-block.edit-mode:active { cursor: grabbing; }
+.chart-block.dragging {
+    opacity: 0.55;
+    outline: 2px dashed var(--accent-blue);
+    outline-offset: -6px;
+    border-radius: var(--radius-md);
+}
+
+/* Chart block header (title + per-feed controls) */
+.chart-block-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    min-height: 24px;
+    flex-wrap: wrap;
+}
+.chart-block-header .chart-block-title {
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+/* Per-feed segmented chart type selector */
+.feed-type-seg {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-stat);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+    margin-left: auto;
+    gap: 1px;
+}
+.feed-type-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    padding: 4px 7px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+    line-height: 0;
+}
+.feed-type-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-card-hover);
+}
+.feed-type-btn.active {
+    background: var(--bg-card);
+    color: var(--accent-blue);
+    box-shadow: inset 0 0 0 1px rgba(74,158,255,0.35);
+}
+.feed-type-btn svg { display: block; }
+
+/* Hide-feed button (edit mode) */
+.feed-hide-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all var(--transition);
+    line-height: 0;
+}
+.feed-hide-btn:hover {
+    color: var(--accent-red);
+    background: rgba(248,113,113,0.12);
+    border-color: rgba(248,113,113,0.25);
+}
+
+/* Hidden-feeds restore row */
+.hidden-feeds-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 20px 14px;
+    border-top: 1px dashed var(--border);
+}
+.hidden-feeds-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 4px;
+}
+.hidden-feed-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+.hidden-feed-chip:hover {
+    border-color: var(--accent-blue);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+.hidden-feed-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.chip-plus {
+    font-weight: 700;
+    color: var(--accent-blue);
+    margin-left: 2px;
+}
+
+/* Chart block title gets a small colored accent when its feed has color */
+.chart-block-title {
+    text-transform: uppercase;
+}
+
+/* Hide the Customize label on narrow screens — keep the icon */
+@media (max-width: 720px) {
+    .icon-btn-label { display: none; }
+    .icon-btn.edit-toggle-btn { padding: 7px; gap: 0; }
+    .edit-banner { top: 52px; padding: 8px 14px; }
+    .edit-banner-inner { font-size: 0.75rem; }
+}
+
+/* When editing, make the feed-type segmented control wrap nicely under
+   the title on very narrow screens */
+@media (max-width: 520px) {
+    .chart-block-header { gap: 6px; }
+    .feed-type-seg { margin-left: 0; }
+}
+
