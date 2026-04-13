@@ -27,6 +27,18 @@ auth_require_login('login.php');
             <button class="range-btn" data-range="30d">30D</button>
         </div>
         <div class="topbar-actions">
+            <button class="icon-btn edit-toggle-btn" id="editModeBtn" title="Customize layout (drag to reorder, pick chart types, hide feeds)">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2l2 2-8 8-3 1 1-3 8-8z" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="icon-btn-label">Customize</span>
+            </button>
+            <button class="icon-btn" id="resetLayoutBtn" title="Reset layout to default">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M2 8a6 6 0 1 0 1.8-4.3" stroke-linecap="round"/>
+                    <path d="M2 2v4h4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
             <button class="icon-btn" id="collapseAllBtn" title="Collapse all panels">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round"/>
@@ -59,6 +71,17 @@ auth_require_login('login.php');
                 </svg>
             </a>
         </div>
+    </div>
+</div>
+
+<!-- Edit mode banner (shown only when editing) -->
+<div class="edit-banner" id="editBanner" role="status" aria-live="polite">
+    <div class="edit-banner-inner">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2l2 2-8 8-3 1 1-3 8-8z" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span><strong>Customize mode:</strong> drag panels &amp; feeds to reorder, pick chart types per feed, or hide feeds you don't need. Your layout is saved automatically.</span>
+        <button class="edit-banner-done" id="editModeDoneBtn">Done</button>
     </div>
 </div>
 
