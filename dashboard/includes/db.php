@@ -23,6 +23,36 @@ function get_db(): PDO {
 }
 
 /**
+ * Ensure the dashboard_layout table exists.
+ *
+ * Lazy migration for installs that predate the layout-persistence feature
+ * (install.php is locked after first run, so we can't rely on it for
+ * upgrades). Safe to call on every request — MySQL no-ops the CREATE IF
+ * NOT EXISTS and a static flag guarantees it only runs once per process.
+ */
+function ensure_layout_table(): void {
+    static $ensured = false;
+    if ($ensured) return;
+    try {
+        $db = get_db();
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS dashboard_layout (
+                scope       VARCHAR(64) NOT NULL PRIMARY KEY,
+                layout_json LONGTEXT    NOT NULL,
+                updated_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                        ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+        $ensured = true;
+    } catch (Exception $e) {
+        // Don't repeatedly retry if the DB is misconfigured — surface via
+        // the API's own error handling instead.
+        $ensured = true;
+        error_log('ensure_layout_table error: ' . $e->getMessage());
+    }
+}
+
+/**
  * Probabilistic cleanup – runs roughly once every 100 calls.
  * Deletes readings older than RETENTION_DAYS.
  */

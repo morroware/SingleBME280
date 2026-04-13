@@ -77,6 +77,21 @@ try {
     ");
     $success[] = 'Created table: readings';
 
+    // --- dashboard_layout table ---
+    // Stores UI customizations (panel order, chart types, collapsed/hidden
+    // state) so they persist across devices and sessions. Keyed by `scope`:
+    // currently only 'global' is used (the dashboard is shared-password, so
+    // all authenticated users see the same layout).
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS dashboard_layout (
+            scope       VARCHAR(64) NOT NULL PRIMARY KEY,
+            layout_json LONGTEXT    NOT NULL,
+            updated_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $success[] = 'Created table: dashboard_layout';
+
     // Write lock file
     file_put_contents($lockFile, date('Y-m-d H:i:s') . " - Install completed\n");
     $success[] = 'Lock file written – install will not run again.';
