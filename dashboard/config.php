@@ -16,6 +16,15 @@ define('DB_PASS', 'your_db_password');
 // --- API authentication ---
 define('API_KEY', 'change-me-to-a-secure-random-key');
 
+// --- Dashboard password protection ---
+// bcrypt hash of the dashboard password. Generate a new hash with:
+//   php -r 'echo password_hash("your-password", PASSWORD_DEFAULT), "\n";'
+// Default hash below corresponds to password: 109Brookside01!
+define('DASHBOARD_PASSWORD_HASH', '$2y$12$AtxQ9ovY5g4E.oTboGvaE.eRHoYNadUnoP/R9qAcX.Ed6Mc9uJcRu');
+
+// Session lifetime in seconds (default: 7 days)
+define('SESSION_LIFETIME', 7 * 24 * 60 * 60);
+
 // --- Data retention (days) – readings older than this are auto-purged ---
 define('RETENTION_DAYS', 90);
 

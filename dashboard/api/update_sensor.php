@@ -15,14 +15,10 @@
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-// --- Auth ---
-$apiKey = isset($_SERVER['HTTP_X_API_KEY']) ? $_SERVER['HTTP_X_API_KEY'] : '';
-if (!hash_equals(API_KEY, $apiKey)) {
-    http_response_code(401);
-    echo json_encode(['status' => 'error', 'message' => 'Invalid API key']);
-    exit;
-}
+// --- Auth: accept either a logged-in dashboard session or a valid X-API-Key ---
+auth_require_api();
 
 // --- Method check ---
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
