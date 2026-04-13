@@ -37,32 +37,63 @@ app = Flask(__name__)
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-handler = RotatingFileHandler('app.log', maxBytes=5 * 1024 * 1024, backupCount=3)
-handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
+def _make_rotating_handler(filename, max_bytes, backup_count, formatter):
+    """Create a RotatingFileHandler, falling back to /tmp if the script dir
+    isn't writable (e.g. running as a user without write perms on the install
+    path). Returns None if no writable location can be found, so the caller
+    can fall back to console-only logging instead of crashing at import time.
+    """
+    candidates = [
+        os.path.join(_SCRIPT_DIR, filename),
+        os.path.join('/tmp', filename),
+    ]
+    for path in candidates:
+        try:
+            h = RotatingFileHandler(path, maxBytes=max_bytes, backupCount=backup_count)
+            h.setFormatter(formatter)
+            if path != candidates[0]:
+                sys.stderr.write(
+                    f"Warning: could not write log to {candidates[0]}, "
+                    f"using {path} instead.\n"
+                )
+            return h
+        except (OSError, PermissionError) as e:
+            sys.stderr.write(f"Warning: cannot open log file {path}: {e}\n")
+            continue
+    return None
+
+
+_app_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logger.addHandler(handler)
 logger.addHandler(logging.StreamHandler())
+
+handler = _make_rotating_handler('app.log', 5 * 1024 * 1024, 3, _app_formatter)
+if handler is not None:
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
 
 LOG_FILE = "sensor_readings.log"
 ERROR_LOG_FILE = "error_log.log"
 
 # Rotating file handlers for the two data/error logs so they don't fill the SD card.
 # 2 MB each, 2 backups = max ~6 MB per log.
-_readings_handler = RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=2)
-_readings_handler.setFormatter(logging.Formatter('%(message)s'))
 _readings_logger = logging.getLogger('readings')
 _readings_logger.setLevel(logging.INFO)
-_readings_logger.addHandler(_readings_handler)
+_readings_handler = _make_rotating_handler(
+    LOG_FILE, 2 * 1024 * 1024, 2, logging.Formatter('%(message)s')
+)
+if _readings_handler is not None:
+    _readings_logger.addHandler(_readings_handler)
 
-_error_handler = RotatingFileHandler(ERROR_LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=2)
-_error_handler.setFormatter(logging.Formatter('%(message)s'))
 _error_logger = logging.getLogger('errors')
 _error_logger.setLevel(logging.ERROR)
-_error_logger.addHandler(_error_handler)
+_error_handler = _make_rotating_handler(
+    ERROR_LOG_FILE, 2 * 1024 * 1024, 2, logging.Formatter('%(message)s')
+)
+if _error_handler is not None:
+    _error_logger.addHandler(_error_handler)
 
 # ---------------------------------------------------------------------------
 # Global state
