@@ -139,7 +139,27 @@ define('API_KEY', 'your-secret-api-key');  // Must match sensor configs
 define('RETENTION_DAYS', 90);
 define('APP_TIMEZONE', 'America/New_York');
 define('OFFLINE_MINUTES', 15);
+
+// Optional – Slack offline alerts. Leave SLACK_API_TOKEN blank to disable.
+define('SLACK_API_TOKEN', '');           // xoxb- bot token (same one used by sensors)
+define('SLACK_CHANNEL', '');             // e.g. alerts
+define('OFFLINE_ALERT_MINUTES', 60);
 ```
+
+### 3a. (Optional) Slack offline alerts
+
+The dashboard can post to Slack when a sensor has not reported for more than
+`OFFLINE_ALERT_MINUTES` (default 60). It uses the same `chat.postMessage`
+endpoint the Pi scripts use, so if you point it at the existing bot token and
+channel, offline alerts land in the same place as temperature alerts.
+
+- Fill in `SLACK_API_TOKEN` and `SLACK_CHANNEL` in `config.php`.
+- The checks piggyback on existing sensor traffic and dashboard refreshes, so
+  no cron is required. If you prefer an explicit cron, hit
+  `api/check_offline.php` with the `X-API-Key` header.
+- Leaving `SLACK_API_TOKEN` blank disables the feature entirely (drop-in safe).
+- On upgrade, either re-run `install.php` (after removing `install.lock`) or
+  let the helper add the `sensors.offline_alerted` column on its first run.
 
 ### 4. Install database tables
 

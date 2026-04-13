@@ -24,6 +24,7 @@
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/offline_alerts.php';
 
 // --- Auth ---
 $apiKey = isset($_SERVER['HTTP_X_API_KEY']) ? $_SERVER['HTTP_X_API_KEY'] : '';
@@ -166,6 +167,19 @@ try {
 
     // Probabilistic cleanup of old data
     maybe_cleanup();
+
+    // Sensor just reported – clear any outstanding offline-alert flag so it
+    // can alert again on its next outage. No-op if Slack alerts are disabled.
+    try {
+        offline_alerts_clear_flag($db, $sensorId);
+    } catch (Exception $e) {
+        // Never let alert bookkeeping break ingestion.
+        error_log('submit.php offline flag clear error: ' . $e->getMessage());
+    }
+
+    // Probabilistic offline check – piggyback on sensor traffic so we don't
+    // need a separate cron. No-op if Slack alerts are disabled.
+    maybe_offline_alerts_check(20);
 
     echo json_encode(['status' => 'ok']);
 

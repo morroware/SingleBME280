@@ -52,6 +52,14 @@ try {
         // Column likely already exists – ignore
     }
 
+    // Add offline_alerted column for Slack offline alerts
+    try {
+        $pdo->exec("ALTER TABLE sensors ADD COLUMN offline_alerted TINYINT(1) NOT NULL DEFAULT 0");
+        $success[] = 'Added column: sensors.offline_alerted';
+    } catch (PDOException $e) {
+        // Column likely already exists – ignore
+    }
+
     // --- readings table ---
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS readings (
