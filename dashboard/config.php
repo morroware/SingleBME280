@@ -33,3 +33,13 @@ define('APP_TIMEZONE', 'America/New_York');
 
 // --- Sensor offline threshold (minutes with no data = offline) ---
 define('OFFLINE_MINUTES', 15);
+
+// --- Slack offline alerts (optional) ---
+// When a sensor has not reported for more than OFFLINE_ALERT_MINUTES,
+// the dashboard will post a message to the configured Slack channel.
+// Leave SLACK_API_TOKEN blank to disable this feature entirely.
+// Use the same bot token and channel as the per-sensor alerts so
+// offline notifications land in the same place as temp alerts.
+define('SLACK_API_TOKEN', '');               // e.g. xoxb-xxxxx (blank = disabled)
+define('SLACK_CHANNEL', '');                 // e.g. alerts
+define('OFFLINE_ALERT_MINUTES', 60);         // minutes offline before alert

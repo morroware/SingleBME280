@@ -11,7 +11,12 @@ header('Cache-Control: no-cache');
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/offline_alerts.php';
 auth_require_api();
+
+// Piggyback offline-alert check on dashboard refreshes. Probabilistic so it
+// only runs occasionally; no-op if Slack alerts are disabled.
+maybe_offline_alerts_check(10);
 
 date_default_timezone_set(APP_TIMEZONE);
 
