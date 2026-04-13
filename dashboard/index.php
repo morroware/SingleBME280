@@ -1,3 +1,7 @@
+<?php
+require_once __DIR__ . '/includes/auth.php';
+auth_require_login('login.php');
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -47,6 +51,13 @@
             <span class="auto-refresh">
                 <span class="auto-refresh-dot"></span> 60s
             </span>
+            <a class="icon-btn" href="logout.php" title="Sign out" aria-label="Sign out">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M10 11l3-3-3-3" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M13 8H6" stroke-linecap="round"/>
+                </svg>
+            </a>
         </div>
     </div>
 </div>

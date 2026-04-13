@@ -10,6 +10,8 @@ header('Content-Type: application/json');
 header('Cache-Control: no-cache');
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
+auth_require_api();
 
 date_default_timezone_set(APP_TIMEZONE);
 

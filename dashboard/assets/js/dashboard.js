@@ -794,15 +794,13 @@
     }
 
     function getApiKey() {
-        // Allow passing API key via meta tag or prompt
+        // Dashboard users are authenticated via the login session cookie, so
+        // an API key is no longer required for manage actions. We still honour
+        // a meta tag or a previously cached key if one is present, so existing
+        // deployments that relied on the key continue to work unchanged.
         var meta = document.querySelector('meta[name="api-key"]');
         if (meta) return meta.getAttribute('content');
-        // Fall back to prompting (cached in sessionStorage)
         var key = sessionStorage.getItem('dashboard_api_key');
-        if (!key) {
-            key = prompt('Enter your API key to manage sensors:');
-            if (key) sessionStorage.setItem('dashboard_api_key', key);
-        }
         return key || '';
     }
 
@@ -814,11 +812,13 @@
 
         var sensorsReq = fetch('api/sensors.php')
             .then(function (r) {
+                if (r.status === 401) { window.location.href = 'login.php'; throw new Error('unauth'); }
                 if (!r.ok) throw new Error('sensors API ' + r.status);
                 return r.json();
             });
         var readingsReq = fetch('api/readings.php?range=' + encodeURIComponent(currentRange) + '&sensor_id=all')
             .then(function (r) {
+                if (r.status === 401) { window.location.href = 'login.php'; throw new Error('unauth'); }
                 if (!r.ok) throw new Error('readings API ' + r.status);
                 return r.json();
             });
