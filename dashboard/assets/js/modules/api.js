@@ -50,3 +50,28 @@ export function deleteSensor(sensorId) {
         body: JSON.stringify({ sensor_id: sensorId }),
     });
 }
+
+// -------------------------------------------------------------------------
+// Dashboard layout persistence
+// -------------------------------------------------------------------------
+export function fetchLayout() {
+    return jsonFetch('api/layout.php');
+}
+
+export function saveLayout(layout) {
+    return jsonFetch('api/layout.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': getApiKey(),
+        },
+        body: JSON.stringify(layout),
+    });
+}
+
+export function deleteLayout() {
+    return jsonFetch('api/layout.php', {
+        method: 'DELETE',
+        headers: { 'X-API-Key': getApiKey() },
+    });
+}

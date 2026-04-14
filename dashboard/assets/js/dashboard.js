@@ -7,7 +7,7 @@
  */
 
 import {
-    loadState, saveState, resetState,
+    loadState, saveState, resetState, hydrateStateFromServer,
     isEditMode, toggleEditMode, setEditMode,
     setPanelCollapsed, setFeedChartType, setFeedHidden,
     getPanelState,
@@ -44,6 +44,9 @@ const resetLayoutBtn  = document.getElementById('resetLayoutBtn');
 // ---------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------
+// Load instantly from localStorage so the first render isn't blocked by
+// a network round-trip, then hydrate from the server so customizations
+// made on another device/browser take over.
 loadState();
 
 initManageModal({
@@ -54,6 +57,10 @@ initManageModal({
 bindTopbar();
 fetchAll();
 autoTimer = setInterval(fetchAll, AUTO_REFRESH_MS);
+
+hydrateStateFromServer().then((changed) => {
+    if (changed && cachedSensors) rerender();
+});
 
 // ---------------------------------------------------------------------
 // Render pipeline
