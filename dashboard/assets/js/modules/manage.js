@@ -8,7 +8,7 @@
 
 import { esc, timeAgo, sensorUrl, SENSOR_PORT } from './utils.js';
 import { removePanelState } from './state.js';
-import { updateSensorIp, deleteSensor } from './api.js';
+import { updateSensorIp, updateSensorLocation, deleteSensor } from './api.js';
 
 let ctx = null;
 let pendingDeleteId = null;
@@ -82,7 +82,12 @@ function buildManageHtml(sensors) {
         html += '<div class="manage-sensor-name">' + esc(s.location_name) + '</div>';
         html += '<div class="manage-sensor-meta">';
         html += '<span class="status-dot ' + onClass + '" style="display:inline-block;margin-right:4px;"></span>';
-        html += esc(onText) + ' \u00B7 ' + esc((s.sensor_type || '').toUpperCase()) + ' \u00B7 Last seen ' + esc(timeAgo(s.last_seen));
+        html += esc(onText) + ' \u00B7 ' + esc((s.sensor_type || '').toUpperCase()) + ' \u00B7 ID: ' + esc(s.sensor_id) + ' \u00B7 Last seen ' + esc(timeAgo(s.last_seen));
+        html += '</div>';
+        html += '<div class="manage-sensor-ip">';
+        html += '<label class="ip-label">Display name</label>';
+        html += '<input type="text" class="ip-input" data-sensor-loc="' + esc(s.sensor_id) + '" value="' + esc(s.location_name || '') + '" placeholder="' + esc(s.sensor_id) + '" maxlength="255">';
+        html += '<button class="btn btn-sm btn-secondary loc-save-btn" data-save-loc="' + esc(s.sensor_id) + '">Save</button>';
         html += '</div>';
         html += '<div class="manage-sensor-ip">';
         html += '<label class="ip-label">Local IP</label>';
@@ -120,12 +125,25 @@ function bindManageInteractions(root) {
         });
     });
 
+    root.querySelectorAll('[data-save-loc]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const sid = btn.getAttribute('data-save-loc');
+            const input = root.querySelector('[data-sensor-loc="' + sid + '"]');
+            const loc = input ? input.value.trim() : '';
+            saveLocation(sid, loc, btn);
+        });
+    });
+
     root.querySelectorAll('.ip-input').forEach(inp => {
         inp.addEventListener('keydown', (e) => {
             if (e.key !== 'Enter') return;
             e.preventDefault();
-            const sid = inp.getAttribute('data-sensor-ip');
-            const saveBtn = root.querySelector('[data-save-ip="' + sid + '"]');
+            const ipSid = inp.getAttribute('data-sensor-ip');
+            const locSid = inp.getAttribute('data-sensor-loc');
+            const sid = ipSid || locSid;
+            if (!sid) return;
+            const selector = ipSid ? '[data-save-ip="' + sid + '"]' : '[data-save-loc="' + sid + '"]';
+            const saveBtn = root.querySelector(selector);
             if (saveBtn) saveBtn.click();
         });
     });
@@ -171,6 +189,48 @@ function saveIp(sensorId, ip, btn) {
         })
         .catch((err) => {
             console.error('Save IP error:', err);
+            btn.textContent = 'Error';
+            btn.style.color = 'var(--accent-red)';
+            setTimeout(() => {
+                btn.textContent = origText;
+                btn.style.color = '';
+                btn.disabled = false;
+            }, 2000);
+        });
+}
+
+function saveLocation(sensorId, locationName, btn) {
+    const origText = btn.textContent;
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+
+    updateSensorLocation(sensorId, locationName)
+        .then(() => {
+            btn.textContent = 'Saved!';
+            btn.style.color = 'var(--accent-green)';
+            const effective = locationName || sensorId;
+            const sensors = (ctx && typeof ctx.getSensors === 'function') ? ctx.getSensors() : [];
+            for (let i = 0; i < sensors.length; i++) {
+                if (sensors[i].sensor_id === sensorId) {
+                    sensors[i].location_name = effective;
+                    break;
+                }
+            }
+            // Update the title displayed in the modal so the user sees the
+            // change stick without re-opening.
+            const row = btn.closest('.manage-sensor-item');
+            if (row) {
+                const nameEl = row.querySelector('.manage-sensor-name');
+                if (nameEl) nameEl.textContent = effective;
+            }
+            setTimeout(() => {
+                btn.textContent = origText;
+                btn.style.color = '';
+                btn.disabled = false;
+            }, 1500);
+        })
+        .catch((err) => {
+            console.error('Save location error:', err);
             btn.textContent = 'Error';
             btn.style.color = 'var(--accent-red)';
             setTimeout(() => {

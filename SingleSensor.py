@@ -5,14 +5,15 @@ Supports BME280 (temp + humidity) and SCD40 (temp + humidity + CO2) sensors.
 Posts readings to a self-hosted PHP dashboard and sends Slack alerts.
 """
 
-from flask import Flask, request, render_template, redirect, jsonify
+from flask import Flask, request, render_template, redirect, jsonify, flash, url_for
 import time
 import configparser
-from threading import Thread, Event
+from threading import Thread, Event, Lock
 import os
 import socket
 import sys
 import logging
+import tempfile
 import traceback
 import signal
 import json
@@ -33,6 +34,13 @@ adafruit_scd4x = None
 # Flask app
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
+# Secret key for flash messages; not used for user sessions. Generated fresh
+# on each start since it only needs to be stable within a single run.
+app.secret_key = os.urandom(24)
+
+# Serialise config file writes so the Flask thread and the monitoring thread
+# can't clobber each other.
+_CONFIG_LOCK = Lock()
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -46,6 +54,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 logger.addHandler(logging.StreamHandler())
+# Prevent root logger from re-emitting our records (systemd would duplicate them).
+logger.propagate = False
 
 LOG_FILE = "sensor_readings.log"
 ERROR_LOG_FILE = "error_log.log"
@@ -57,18 +67,25 @@ _readings_handler.setFormatter(logging.Formatter('%(message)s'))
 _readings_logger = logging.getLogger('readings')
 _readings_logger.setLevel(logging.INFO)
 _readings_logger.addHandler(_readings_handler)
+_readings_logger.propagate = False
 
 _error_handler = RotatingFileHandler(ERROR_LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=2)
 _error_handler.setFormatter(logging.Formatter('%(message)s'))
 _error_logger = logging.getLogger('errors')
 _error_logger.setLevel(logging.ERROR)
 _error_logger.addHandler(_error_handler)
+_error_logger.propagate = False
+
+# Silence Flask/Werkzeug's per-request access log – it's noisy and not useful
+# for our use case (local settings UI only).
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 # ---------------------------------------------------------------------------
 # Global state
 # ---------------------------------------------------------------------------
 shutdown_event = Event()
 monitoring_error = None  # Set by monitoring thread if init fails
+detected_sensor_type = None  # Populated by monitoring thread on successful init
 
 alert_states = {
     'high_temp': False,
@@ -106,15 +123,20 @@ def get_local_ip():
         return None
 
 
-def find_available_port(start_port=5000, max_attempts=100):
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('', port))
-                return port
-        except OSError:
-            continue
-    raise RuntimeError("No available ports found")
+# Fixed settings-UI port. The dashboard's "Open sensor" link assumes this,
+# so falling back to a different port would silently break that feature.
+# If the port is taken, we fail loudly and let systemd restart after a delay.
+SETTINGS_PORT = 5000
+
+
+def port_is_free(port):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(('', port))
+            return True
+    except OSError:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -137,11 +159,14 @@ _INT_KEYS = {'MINUTES_BETWEEN_READS', 'THRESHOLD_COUNT'}
 def read_settings_from_conf(conf_file):
     """Read and validate settings from configuration file."""
     config = configparser.ConfigParser()
-    config.read(conf_file)
+    with _CONFIG_LOCK:
+        config.read(conf_file)
     settings = {}
 
+    current_key = None
     try:
         for key in _REQUIRED_KEYS:
+            current_key = key
             if key in _FLOAT_KEYS:
                 settings[key] = config.getfloat('General', key)
             elif key in _INT_KEYS:
@@ -149,8 +174,8 @@ def read_settings_from_conf(conf_file):
             else:
                 settings[key] = config.get('General', key)
     except configparser.NoOptionError as e:
-        log_error(f"Missing {key} in configuration file.")
-        raise ValueError(f"Missing {key} in configuration file.") from e
+        log_error(f"Missing {current_key} in configuration file.")
+        raise ValueError(f"Missing {current_key} in configuration file.") from e
     except Exception as e:
         log_error(f"Error reading configuration: {e}")
         raise ValueError(f"Error reading configuration: {e}") from e
@@ -169,7 +194,49 @@ def read_settings_from_conf(conf_file):
     if not settings['SENSOR_LOCATION_NAME'].strip():
         raise ValueError("SENSOR_LOCATION_NAME must not be empty.")
 
+    # Validate BME280 address parses as hex
+    try:
+        int(settings['BME280_ADDRESS'], 16)
+    except (TypeError, ValueError):
+        logger.warning(f"Invalid BME280_ADDRESS {settings['BME280_ADDRESS']!r}, "
+                       f"falling back to 0x76.")
+        settings['BME280_ADDRESS'] = '0x76'
+
     return settings
+
+
+def _atomic_write_config(conf_file, config):
+    """Write a configparser object to conf_file atomically (temp + rename)."""
+    target_dir = os.path.dirname(os.path.abspath(conf_file)) or '.'
+    fd, tmp_path = tempfile.mkstemp(prefix='.settings-', suffix='.tmp', dir=target_dir)
+    try:
+        with os.fdopen(fd, 'w') as f:
+            config.write(f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, conf_file)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def write_settings_to_conf(conf_file, new_settings):
+    """Merge `new_settings` with existing config and write atomically.
+
+    Preserves any existing keys the caller didn't include (e.g. future
+    optional keys, or ones the current UI doesn't expose).
+    """
+    with _CONFIG_LOCK:
+        config = configparser.ConfigParser()
+        config.read(conf_file)
+        if not config.has_section('General'):
+            config.add_section('General')
+        for k, v in new_settings.items():
+            config.set('General', str(k), str(v))
+        _atomic_write_config(conf_file, config)
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +445,10 @@ def status_route():
     """Quick health check – shows whether monitoring is running."""
     if monitoring_error:
         return jsonify(status='error', message=monitoring_error), 503
-    return jsonify(status='ok'), 200
+    return jsonify(
+        status='ok',
+        sensor=detected_sensor_type,
+    ), 200
 
 
 @app.route('/settings', methods=['GET', 'POST'])
@@ -386,35 +456,49 @@ def settings_route():
     conf_file = CONF_FILE
     if request.method == 'POST':
         try:
-            action = request.form.get('action')
-            current_settings = read_settings_from_conf(conf_file)
-            new_settings = {}
+            action = request.form.get('action', 'save')
+
+            # Start from the existing settings so the form can omit keys
+            # (e.g. the optional BME280_ADDRESS) without losing them.
+            try:
+                merged = read_settings_from_conf(conf_file)
+            except Exception:
+                # Config was missing/corrupt – start empty so we can at least
+                # write whatever the user submitted.
+                merged = {}
 
             for key, value in request.form.items():
                 if key == 'action':
                     continue
                 try:
                     if key in _FLOAT_KEYS:
-                        new_settings[key] = float(value)
+                        merged[key] = float(value)
                     elif key in _INT_KEYS:
-                        new_settings[key] = int(value)
+                        merged[key] = int(value)
                     else:
-                        new_settings[key] = value.strip()
+                        merged[key] = value.strip()
                 except (ValueError, KeyError):
-                    return jsonify(error=f'Invalid value for {key}'), 400
+                    flash(f'Invalid value for {key}', 'error')
+                    return redirect(url_for('settings_route'))
 
-            config = configparser.ConfigParser()
-            config['General'] = {str(k): str(v) for k, v in new_settings.items()}
-            with open(conf_file, 'w') as f:
-                config.write(f)
+            # Validate required keys are all present before writing. Missing
+            # values here would guarantee the monitoring loop can't re-read.
+            missing = [k for k in _REQUIRED_KEYS if k not in merged or merged[k] == '']
+            if missing:
+                flash('Missing required values: ' + ', '.join(missing), 'error')
+                return redirect(url_for('settings_route'))
+
+            write_settings_to_conf(conf_file, merged)
 
             if action == "reboot":
                 return reboot_system()
 
-            return jsonify(message='Settings updated successfully!'), 200
+            flash('Settings updated successfully.', 'success')
+            return redirect(url_for('settings_route'))
         except Exception as e:
             log_error(f"Settings update error: {e}")
-            return jsonify(error=f'Error updating settings: {e}'), 500
+            flash(f'Error updating settings: {e}', 'error')
+            return redirect(url_for('settings_route'))
     else:
         try:
             current_settings = read_settings_from_conf(conf_file)
@@ -438,7 +522,7 @@ def reboot_system():
 # Main monitoring loop
 # ---------------------------------------------------------------------------
 def run_monitoring():
-    global alert_states, alert_counters, monitoring_error
+    global alert_states, alert_counters, monitoring_error, detected_sensor_type
 
     # Read settings
     try:
@@ -448,17 +532,29 @@ def run_monitoring():
         monitoring_error = str(e)
         return
 
-    # Initialise sensor
-    try:
-        sensor_type_cfg = settings.get('SENSOR_TYPE', 'auto').lower().strip()
-        bme_addr = settings.get('BME280_ADDRESS', '0x76')
-        sensor_info = init_sensor(sensor_type_cfg, bme_addr)
-        detected_type = sensor_info[0]
-        logger.info(f"Sensor active: {detected_type}")
-    except Exception as e:
-        log_error(f"Failed to initialise sensor: {e}")
-        monitoring_error = str(e)
-        return
+    # Initialise sensor – retry a few times so transient I2C startup glitches
+    # (common right after boot) don't take the service down. systemd already
+    # delays 15s before launch, but the I2C bus can still be slow to settle.
+    sensor_info = None
+    init_attempts = 5
+    for attempt in range(1, init_attempts + 1):
+        if shutdown_event.is_set():
+            return
+        try:
+            sensor_type_cfg = settings.get('SENSOR_TYPE', 'auto').lower().strip()
+            bme_addr = settings.get('BME280_ADDRESS', '0x76')
+            sensor_info = init_sensor(sensor_type_cfg, bme_addr)
+            detected_type = sensor_info[0]
+            detected_sensor_type = detected_type
+            logger.info(f"Sensor active: {detected_type}")
+            break
+        except Exception as e:
+            log_error(f"Sensor init attempt {attempt}/{init_attempts} failed: {e}")
+            if attempt == init_attempts:
+                monitoring_error = str(e)
+                return
+            # Exponential-ish backoff, capped at ~15s.
+            shutdown_event.wait(timeout=min(15, 2 * attempt))
 
     minutes_between_reads = settings['MINUTES_BETWEEN_READS']
     last_read_time = 0
@@ -482,9 +578,10 @@ def run_monitoring():
                     co2 = reading['co2']
 
                     co2_str = f", CO2: {co2} ppm" if co2 is not None else ""
+                    hum_log = f"{humidity:.1f}%" if humidity is not None else "n/a"
                     logger.info(
                         f"Read - Temp: {temp_f:.1f}F ({temp_c:.1f}C), "
-                        f"Humidity: {humidity:.1f}%{co2_str}"
+                        f"Humidity: {hum_log}{co2_str}"
                     )
 
                     # --- High temperature alert ---
@@ -546,10 +643,13 @@ def run_monitoring():
                 except Exception as e:
                     log_error(f"Error reading/sending data: {e}\n{traceback.format_exc()}")
 
-            time.sleep(5)
+            # Wake on shutdown so service restarts are quick.
+            if shutdown_event.wait(timeout=5):
+                break
         except Exception as e:
             log_error(f"Error in monitoring loop: {e}")
-            time.sleep(5)
+            if shutdown_event.wait(timeout=5):
+                break
 
 
 # ---------------------------------------------------------------------------
@@ -567,18 +667,28 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
+    monitoring_thread = None
     try:
         monitoring_thread = Thread(target=run_monitoring, daemon=True)
         monitoring_thread.start()
 
-        port = find_available_port(5000)
-        logger.info(f"Starting Flask on port {port}...")
-        app.run(host='0.0.0.0', port=port, debug=False)
+        if not port_is_free(SETTINGS_PORT):
+            # Fail loudly so systemd restarts (after RestartSec). Falling back
+            # to a random port would silently break the dashboard's "Open"
+            # link, which assumes port 5000.
+            raise RuntimeError(
+                f"Port {SETTINGS_PORT} is in use. "
+                "Stop any other process using it and retry."
+            )
+
+        logger.info(f"Starting Flask on port {SETTINGS_PORT}...")
+        app.run(host='0.0.0.0', port=SETTINGS_PORT, debug=False, use_reloader=False)
     except SystemExit:
         pass  # Expected from signal_handler
     except Exception as e:
         log_error(f"Error starting server: {e}")
     finally:
         shutdown_event.set()
-        monitoring_thread.join(timeout=10)
+        if monitoring_thread is not None:
+            monitoring_thread.join(timeout=10)
         logger.info("Application shut down.")

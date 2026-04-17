@@ -108,27 +108,27 @@ try {
     // We'll use a flag to skip the ip_address update when there's nothing new.
     $updateIp = ($ipAddress !== null);
 
-    // Upsert sensor record
+    // Upsert sensor record.
+    //
+    // location_name is set to sensor_id on INSERT, but preserved on UPDATE so
+    // a user-provided rename (via the dashboard's manage modal) isn't wiped
+    // out by the very next sensor submission. Same for ip_address when the
+    // sensor didn't send one this round.
     if ($updateIp) {
         $stmt = $db->prepare("
             INSERT INTO sensors (sensor_id, sensor_type, location_name, ip_address, last_seen)
             VALUES (:sid, :type, :loc, :ip, :seen)
             ON DUPLICATE KEY UPDATE
-                sensor_type   = :type2,
-                location_name = :loc2,
-                ip_address    = :ip2,
-                last_seen     = :seen2
+                sensor_type = VALUES(sensor_type),
+                ip_address  = VALUES(ip_address),
+                last_seen   = VALUES(last_seen)
         ");
         $stmt->execute([
-            ':sid'   => $sensorId,
-            ':type'  => $sensorType,
-            ':loc'   => $sensorId,
-            ':ip'    => $ipAddress,
-            ':seen'  => $now,
-            ':type2' => $sensorType,
-            ':loc2'  => $sensorId,
-            ':ip2'   => $ipAddress,
-            ':seen2' => $now,
+            ':sid'  => $sensorId,
+            ':type' => $sensorType,
+            ':loc'  => $sensorId,
+            ':ip'   => $ipAddress,
+            ':seen' => $now,
         ]);
     } else {
         // No local_ip provided – don't overwrite a manually-set IP
@@ -136,18 +136,14 @@ try {
             INSERT INTO sensors (sensor_id, sensor_type, location_name, last_seen)
             VALUES (:sid, :type, :loc, :seen)
             ON DUPLICATE KEY UPDATE
-                sensor_type   = :type2,
-                location_name = :loc2,
-                last_seen     = :seen2
+                sensor_type = VALUES(sensor_type),
+                last_seen   = VALUES(last_seen)
         ");
         $stmt->execute([
-            ':sid'   => $sensorId,
-            ':type'  => $sensorType,
-            ':loc'   => $sensorId,
-            ':seen'  => $now,
-            ':type2' => $sensorType,
-            ':loc2'  => $sensorId,
-            ':seen2' => $now,
+            ':sid'  => $sensorId,
+            ':type' => $sensorType,
+            ':loc'  => $sensorId,
+            ':seen' => $now,
         ]);
     }
 

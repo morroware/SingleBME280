@@ -42,20 +42,33 @@ date_default_timezone_set(APP_TIMEZONE);
 try {
     $db = get_db();
 
-    // Delete readings first (foreign key safety)
-    $stmt = $db->prepare("DELETE FROM readings WHERE sensor_id = :sid");
-    $stmt->execute([':sid' => $sensorId]);
-    $deletedReadings = $stmt->rowCount();
-
-    // Delete sensor record
-    $stmt = $db->prepare("DELETE FROM sensors WHERE sensor_id = :sid");
-    $stmt->execute([':sid' => $sensorId]);
-    $deletedSensor = $stmt->rowCount();
-
-    if ($deletedSensor === 0) {
+    // Confirm the sensor exists up-front so we can 404 cleanly instead of
+    // silently succeeding on an already-deleted ID.
+    $check = $db->prepare("SELECT 1 FROM sensors WHERE sensor_id = :sid");
+    $check->execute([':sid' => $sensorId]);
+    if (!$check->fetch()) {
         http_response_code(404);
         echo json_encode(['status' => 'error', 'message' => 'Sensor not found']);
         exit;
+    }
+
+    // Transactional delete: readings first, then the sensor row. Either
+    // both succeed or neither does — no orphan readings.
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare("DELETE FROM readings WHERE sensor_id = :sid");
+        $stmt->execute([':sid' => $sensorId]);
+        $deletedReadings = $stmt->rowCount();
+
+        $stmt = $db->prepare("DELETE FROM sensors WHERE sensor_id = :sid");
+        $stmt->execute([':sid' => $sensorId]);
+
+        $db->commit();
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
     }
 
     echo json_encode([

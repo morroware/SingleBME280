@@ -17,7 +17,7 @@ Raspberry Pi Zero sensor monitoring system with a self-hosted PHP dashboard. Sup
 └──────────────┘                      └─────────────────────┘
 ```
 
-Each Pi Zero runs `SingleBME280.py`, which:
+Each Pi Zero runs `SingleSensor.py`, which:
 - Auto-detects the connected sensor (BME280 or SCD40)
 - Reads temperature, humidity, and CO2 (SCD40 only) on a configurable interval
 - POSTs JSON to the dashboard API over HTTPS
@@ -71,8 +71,8 @@ pip3 install flask adafruit-circuitpython-scd4x slack_sdk configparser
 ### 2. Clone and configure
 
 ```bash
-git clone https://github.com/morroware/SingleBME280.git
-cd SingleBME280
+git clone https://github.com/morroware/SingleBME280.git SingleSensor
+cd SingleSensor
 ```
 
 Edit `SingleSensorSettings.conf`:
@@ -97,12 +97,12 @@ bme280_address = 0x76                 # 0x76 or 0x77
 sudo bash install.sh
 ```
 
-The install script automatically detects your user and install path, generates the systemd service, removes any old `@reboot` cron entries, and starts the service.
+The install script automatically detects your user and install path, generates the systemd service, removes any old `@reboot` cron entries, and (on upgrade) removes the legacy `singlebme280` service before starting `singlesensor`.
 
 Check status:
 ```bash
-sudo systemctl status singlebme280
-journalctl -u singlebme280 -f
+sudo systemctl status singlesensor
+journalctl -u singlesensor -f
 ```
 
 > **Note:** The service waits 15 seconds before starting to ensure I2C and networking are ready.
@@ -110,7 +110,7 @@ journalctl -u singlebme280 -f
 ### 4. Test
 
 ```bash
-python3 SingleBME280.py
+python3 SingleSensor.py
 ```
 Access settings at `http://<pi_ip>:5000/settings`.
 
@@ -160,6 +160,8 @@ channel, offline alerts land in the same place as temperature alerts.
 - Leaving `SLACK_API_TOKEN` blank disables the feature entirely (drop-in safe).
 - On upgrade, either re-run `install.php` (after removing `install.lock`) or
   let the helper add the `sensors.offline_alerted` column on its first run.
+- Alert claims are atomic, so running multiple checks concurrently (piggyback
+  + cron) will not produce duplicate Slack messages.
 
 ### 4. Install database tables
 
@@ -176,6 +178,7 @@ Visit `https://yourdomain.com/dashboard/` to see the live dashboard.
 - **Humidity chart**: Line chart of all sensors over time
 - **CO2 chart**: Shown automatically when SCD40 sensors are present
 - **Time ranges**: 1H, 6H, 24H, 7D, 30D with automatic downsampling for large ranges
+- **Rename sensors**: Set a friendly display name per sensor from the Manage modal (survives future submissions)
 - **Auto-refresh**: Dashboard updates every 60 seconds
 - **Data retention**: Automatically purges readings older than the configured retention period
 - **Dark theme**: Professional monitoring interface, responsive on mobile
@@ -214,13 +217,27 @@ Returns time-series data for charts.
 | `start`     | —       | Custom start (ISO date) |
 | `end`       | —       | Custom end (ISO date) |
 
+### POST `/api/update_sensor.php`
+
+Update the editable fields of a sensor.
+
+```json
+{
+    "sensor_id":     "kitchen",
+    "ip_address":    "192.168.1.42",
+    "location_name": "Kitchen"
+}
+```
+
+All fields except `sensor_id` are optional.
+
 ## File Structure
 
 ```
-SingleBME280/
-├── SingleBME280.py              # Pi Zero sensor script
+SingleSensor/
+├── SingleSensor.py              # Pi Zero sensor script
 ├── SingleSensorSettings.conf    # Pi Zero config
-├── singlebme280.service         # systemd unit for auto-start on boot
+├── singlesensor.service         # systemd unit for auto-start on boot
 ├── install.sh                   # One-command installer for the systemd service
 ├── templates/
 │   └── settings.html            # Pi Zero web settings UI (Flask template)
@@ -233,14 +250,21 @@ SingleBME280/
     ├── api/
     │   ├── submit.php           # Data ingestion endpoint
     │   ├── readings.php         # Chart data endpoint
-    │   └── sensors.php          # Sensor listing endpoint
+    │   ├── sensors.php          # Sensor listing endpoint
+    │   ├── update_sensor.php    # Edit IP / display name
+    │   ├── delete_sensor.php    # Remove a sensor + its readings
+    │   ├── layout.php           # Persist UI layout customizations
+    │   └── check_offline.php    # Cron entrypoint for Slack offline alerts
     ├── includes/
-    │   └── db.php               # Database connection
+    │   ├── db.php               # Database connection
+    │   ├── auth.php             # Session + API-key auth
+    │   └── offline_alerts.php   # Slack offline alert engine
     └── assets/
         ├── css/
         │   └── style.css
         └── js/
-            └── dashboard.js     # Chart.js frontend logic
+            ├── dashboard.js
+            └── modules/         # render / charts / state / drag-drop / manage / api / utils
 ```
 
 ## Security Notes
@@ -249,3 +273,4 @@ SingleBME280/
 - The `.htaccess` file blocks direct access to `config.php`, `includes/`, and lock files.
 - Sensor settings (including Slack tokens) are stored in plaintext on each Pi. Secure physical access to your Pis.
 - The Pi settings web interface has no authentication. It is only accessible on your local network.
+- Dashboard login redirects are strictly validated to same-origin paths to prevent open-redirect phishing.
