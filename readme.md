@@ -71,6 +71,8 @@ pip3 install flask adafruit-circuitpython-scd4x slack_sdk configparser
 ### 2. Clone and configure
 
 ```bash
+# The repository is still hosted as SingleBME280 on GitHub for compatibility;
+# we clone it into a folder called SingleSensor to match the new project name.
 git clone https://github.com/morroware/SingleBME280.git SingleSensor
 cd SingleSensor
 ```
@@ -136,6 +138,12 @@ define('DB_NAME', 'youruser_sensors');
 define('DB_USER', 'youruser_dbuser');
 define('DB_PASS', 'your_db_password');
 define('API_KEY', 'your-secret-api-key');  // Must match sensor configs
+
+// Dashboard sign-in password (bcrypt hash). Generate one with:
+//   php -r 'echo password_hash("your-password", PASSWORD_DEFAULT), "\n";'
+define('DASHBOARD_PASSWORD_HASH', '$2y$12$...');
+define('SESSION_LIFETIME', 7 * 24 * 60 * 60);  // 7 days
+
 define('RETENTION_DAYS', 90);
 define('APP_TIMEZONE', 'America/New_York');
 define('OFFLINE_MINUTES', 15);
@@ -145,6 +153,10 @@ define('SLACK_API_TOKEN', '');           // xoxb- bot token (same one used by se
 define('SLACK_CHANNEL', '');             // e.g. alerts
 define('OFFLINE_ALERT_MINUTES', 60);
 ```
+
+> **Important**: change `DASHBOARD_PASSWORD_HASH` before exposing the
+> dashboard. The shipped default is a placeholder and must not be reused
+> on a public deployment.
 
 ### 3a. (Optional) Slack offline alerts
 
@@ -244,6 +256,8 @@ SingleSensor/
 ├── readme.md
 └── dashboard/                   # Self-hosted on cPanel
     ├── index.php                # Dashboard UI
+    ├── login.php                # Password sign-in page
+    ├── logout.php               # Session teardown
     ├── config.php               # Server configuration
     ├── install.php              # One-time DB setup
     ├── .htaccess                # Security rules

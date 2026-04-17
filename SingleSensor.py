@@ -265,7 +265,7 @@ def send_slack_alert(message, settings):
 
 
 # ---------------------------------------------------------------------------
-# Dashboard API submission (replaces Adafruit IO)
+# Dashboard API submission
 # ---------------------------------------------------------------------------
 def send_to_dashboard(settings, temperature_f, temperature_c, humidity, co2=None,
                       detected_type='bme280'):
