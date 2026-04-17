@@ -14,8 +14,9 @@ function safe_redirect(?string $redirect): string {
     if (!is_string($redirect) || $redirect === '') {
         return 'index.php';
     }
-    // Reject protocol-relative and absolute URLs.
-    if (str_starts_with($redirect, '//') || str_starts_with($redirect, '\\\\')) {
+    // Reject protocol-relative and UNC paths (//evil.com, \\evil.com).
+    // substr-compare keeps this PHP 7.4 compatible (str_starts_with is 8.0+).
+    if (substr($redirect, 0, 2) === '//' || substr($redirect, 0, 2) === '\\\\') {
         return 'index.php';
     }
     // Reject any scheme (http:, javascript:, data:, etc.)

@@ -481,9 +481,17 @@ def settings_route():
                     flash(f'Invalid value for {key}', 'error')
                     return redirect(url_for('settings_route'))
 
-            # Validate required keys are all present before writing. Missing
-            # values here would guarantee the monitoring loop can't re-read.
-            missing = [k for k in _REQUIRED_KEYS if k not in merged or merged[k] == '']
+            # Every required key must be present so the monitoring loop can
+            # re-read successfully. Blank strings are allowed for most keys
+            # (e.g. SLACK_API_TOKEN empty = Slack disabled), but a handful
+            # genuinely cannot be empty.
+            must_be_nonempty = {'SENSOR_LOCATION_NAME'}
+            missing = []
+            for k in _REQUIRED_KEYS:
+                if k not in merged:
+                    missing.append(k)
+                elif k in must_be_nonempty and str(merged[k]).strip() == '':
+                    missing.append(k)
             if missing:
                 flash('Missing required values: ' + ', '.join(missing), 'error')
                 return redirect(url_for('settings_route'))
