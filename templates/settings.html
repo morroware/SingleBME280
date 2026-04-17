@@ -10,11 +10,19 @@
         .form-group { margin-bottom: 1.5rem; }
         .btn-group-custom { margin-top: 1rem; }
         .btn-group-custom .btn { margin-right: 0.5rem; }
+        .flash { margin-bottom: 1rem; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1 class="mb-4">Sensor Settings</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, msg in messages %}
+                    <div class="flash alert alert-{{ 'success' if category == 'success' else 'danger' }}">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
         <form action="/settings" method="post" id="settingsForm">
             {% for key, value in settings.items() %}
             <div class="form-group">
@@ -25,6 +33,8 @@
                     <option value="bme280" {% if value == 'bme280' %}selected{% endif %}>BME280</option>
                     <option value="scd40" {% if value == 'scd40' %}selected{% endif %}>SCD40</option>
                 </select>
+                {% elif key == 'SLACK_API_TOKEN' or key == 'DASHBOARD_API_KEY' %}
+                <input type="password" class="form-control" id="{{ key }}" name="{{ key }}" value="{{ value }}" autocomplete="off">
                 {% else %}
                 <input type="text" class="form-control" id="{{ key }}" name="{{ key }}" value="{{ value }}">
                 {% endif %}
@@ -36,7 +46,5 @@
             </div>
         </form>
     </div>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>

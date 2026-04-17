@@ -40,6 +40,17 @@ export function updateSensorIp(sensorId, ip) {
     });
 }
 
+export function updateSensorLocation(sensorId, locationName) {
+    return jsonFetch('api/update_sensor.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': getApiKey(),
+        },
+        body: JSON.stringify({ sensor_id: sensorId, location_name: locationName }),
+    });
+}
+
 export function deleteSensor(sensorId) {
     return jsonFetch('api/delete_sensor.php', {
         method: 'POST',

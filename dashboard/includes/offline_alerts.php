@@ -31,7 +31,7 @@ function offline_alerts_enabled(): bool {
     if ($token === '' || $channel === '') {
         return false;
     }
-    // Treat placeholder tokens as disabled (mirrors SingleBME280.py)
+    // Treat placeholder tokens as disabled (mirrors SingleSensor.py)
     if (strpos($token, 'xoxb-slack') === 0) {
         return false;
     }
@@ -143,6 +143,7 @@ function offline_alerts_check(): int {
         $db = get_db();
         offline_alerts_ensure_schema($db);
 
+        // Candidate sensors: offline past the threshold and not yet alerted.
         $stmt = $db->prepare("
             SELECT sensor_id, location_name, last_seen
             FROM sensors
@@ -157,12 +158,35 @@ function offline_alerts_check(): int {
             return 0;
         }
 
-        $update = $db->prepare("UPDATE sensors SET offline_alerted = 1 WHERE sensor_id = :sid");
+        // Atomically claim the row BEFORE posting to Slack. If two PHP
+        // workers race here, only one will see rowCount()==1 and post the
+        // alert — the other's UPDATE is a no-op because the flag is already
+        // set. Prevents duplicate Slack messages under concurrent traffic.
+        $claim  = $db->prepare(
+            "UPDATE sensors SET offline_alerted = 1
+             WHERE sensor_id = :sid AND (offline_alerted = 0 OR offline_alerted IS NULL)"
+        );
+        $rollback = $db->prepare(
+            "UPDATE sensors SET offline_alerted = 0 WHERE sensor_id = :sid"
+        );
 
         foreach ($rows as $row) {
             $sid      = $row['sensor_id'];
-            $label    = $row['location_name'] !== '' ? $row['location_name'] : $sid;
+            $label    = ($row['location_name'] !== null && $row['location_name'] !== '')
+                        ? $row['location_name'] : $sid;
             $lastSeen = $row['last_seen'];
+
+            try {
+                $claim->execute([':sid' => $sid]);
+            } catch (PDOException $e) {
+                error_log('offline_alerts claim failed: ' . $e->getMessage());
+                continue;
+            }
+            if ($claim->rowCount() === 0) {
+                // Another worker beat us to it.
+                continue;
+            }
+
             $msg = sprintf(
                 ":warning: Sensor *%s* offline for more than %d minutes (last seen %s).",
                 $label,
@@ -171,11 +195,14 @@ function offline_alerts_check(): int {
             );
 
             if (offline_alerts_post_slack($msg)) {
+                $sent++;
+            } else {
+                // Slack post failed — roll back the claim so we try again
+                // on the next check instead of silently losing the alert.
                 try {
-                    $update->execute([':sid' => $sid]);
-                    $sent++;
+                    $rollback->execute([':sid' => $sid]);
                 } catch (PDOException $e) {
-                    error_log('offline_alerts flag update failed: ' . $e->getMessage());
+                    error_log('offline_alerts rollback failed: ' . $e->getMessage());
                 }
             }
         }

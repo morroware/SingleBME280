@@ -5,15 +5,36 @@
 
 require_once __DIR__ . '/includes/auth.php';
 
+/**
+ * Return $redirect only if it is a safe, same-origin path; otherwise
+ * fall back to index.php. Blocks protocol-relative URLs (//evil.com),
+ * absolute URLs (https://evil.com), and backslash/encoded-slash tricks.
+ */
+function safe_redirect(?string $redirect): string {
+    if (!is_string($redirect) || $redirect === '') {
+        return 'index.php';
+    }
+    // Reject protocol-relative and UNC paths (//evil.com, \\evil.com).
+    // substr-compare keeps this PHP 7.4 compatible (str_starts_with is 8.0+).
+    if (substr($redirect, 0, 2) === '//' || substr($redirect, 0, 2) === '\\\\') {
+        return 'index.php';
+    }
+    // Reject any scheme (http:, javascript:, data:, etc.)
+    if (preg_match('#^[a-z][a-z0-9+.-]*:#i', $redirect)) {
+        return 'index.php';
+    }
+    // Only allow a conservative character set typical of relative URLs.
+    if (!preg_match('#^/?[a-zA-Z0-9_./?=&%-]*$#', $redirect)) {
+        return 'index.php';
+    }
+    return $redirect;
+}
+
 auth_start_session();
 
 // If already logged in, go straight to the dashboard
 if (auth_is_logged_in()) {
-    $redirect = isset($_GET['redirect']) ? $_GET['redirect'] : 'index.php';
-    // Only allow same-site redirects
-    if (!preg_match('#^/?[a-zA-Z0-9_./?=&%-]*$#', $redirect)) {
-        $redirect = 'index.php';
-    }
+    $redirect = safe_redirect($_GET['redirect'] ?? null);
     header('Location: ' . $redirect);
     exit;
 }
@@ -26,11 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Password is required.';
     } elseif (auth_verify_password($password)) {
         auth_login();
-        $redirect = isset($_POST['redirect']) ? $_POST['redirect'] : 'index.php';
-        // Only allow same-site redirects
-        if (!preg_match('#^/?[a-zA-Z0-9_./?=&%-]*$#', $redirect)) {
-            $redirect = 'index.php';
-        }
+        $redirect = safe_redirect($_POST['redirect'] ?? null);
         header('Location: ' . $redirect);
         exit;
     } else {

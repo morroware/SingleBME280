@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# install.sh — Install SingleBME280 as a systemd service on Raspberry Pi
+# install.sh — Install SingleSensor as a systemd service on Raspberry Pi.
+# Supports both BME280 and SCD40 sensors (auto-detected at runtime).
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SERVICE_NAME="singlebme280"
+SERVICE_NAME="singlesensor"
 SERVICE_FILE="${SCRIPT_DIR}/${SERVICE_NAME}.service"
 DEST="/etc/systemd/system/${SERVICE_NAME}.service"
 CURRENT_USER="$(whoami)"
+
+# Legacy service name from before the rename. We'll tear it down if found so
+# two copies of the monitoring loop don't run in parallel after an upgrade.
+LEGACY_SERVICE_NAME="singlebme280"
+LEGACY_DEST="/etc/systemd/system/${LEGACY_SERVICE_NAME}.service"
 
 # Must run as root
 if [ "$(id -u)" -ne 0 ]; then
@@ -30,10 +36,20 @@ echo "  Directory: ${SCRIPT_DIR}"
 echo "  Log file:  ${REAL_HOME}/sensor.log"
 echo ""
 
+# --- Remove the legacy service if present (safe no-op on fresh installs) ---
+if systemctl list-unit-files "${LEGACY_SERVICE_NAME}.service" 2>/dev/null | grep -q "${LEGACY_SERVICE_NAME}"; then
+    echo "Found legacy ${LEGACY_SERVICE_NAME} service – removing it first..."
+    systemctl stop    "${LEGACY_SERVICE_NAME}" 2>/dev/null || true
+    systemctl disable "${LEGACY_SERVICE_NAME}" 2>/dev/null || true
+    rm -f "${LEGACY_DEST}"
+    systemctl daemon-reload
+    echo "  Done."
+fi
+
 # Generate the service file with the correct user and paths
 cat > "$DEST" <<EOF
 [Unit]
-Description=SingleBME280 Sensor Monitoring
+Description=SingleSensor Monitoring (BME280 / SCD40)
 After=multi-user.target network.target
 
 [Service]
@@ -41,7 +57,7 @@ Type=simple
 User=${REAL_USER}
 WorkingDirectory=${SCRIPT_DIR}
 ExecStartPre=/bin/sleep 15
-ExecStart=/usr/bin/python3 ${SCRIPT_DIR}/SingleBME280.py
+ExecStart=/usr/bin/python3 ${SCRIPT_DIR}/SingleSensor.py
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:${REAL_HOME}/sensor.log
@@ -51,19 +67,17 @@ StandardError=append:${REAL_HOME}/sensor.log
 WantedBy=multi-user.target
 EOF
 
-# Remove old @reboot cron entry if it exists
-if crontab -u "$REAL_USER" -l 2>/dev/null | grep -q "SingleBME280"; then
-    echo "Removing old @reboot cron entry..."
-    crontab -u "$REAL_USER" -l 2>/dev/null | grep -v "SingleBME280" | crontab -u "$REAL_USER" -
-    echo "  Done."
-fi
-
-# Also check root's crontab
-if crontab -l 2>/dev/null | grep -q "SingleBME280"; then
-    echo "Removing old @reboot cron entry from root crontab..."
-    crontab -l 2>/dev/null | grep -v "SingleBME280" | crontab -
-    echo "  Done."
-fi
+# Remove old @reboot cron entries (both legacy and current names)
+for TAG in SingleBME280 SingleSensor; do
+    if crontab -u "$REAL_USER" -l 2>/dev/null | grep -q "$TAG"; then
+        echo "Removing old @reboot cron entry (${TAG}) from ${REAL_USER}'s crontab..."
+        crontab -u "$REAL_USER" -l 2>/dev/null | grep -v "$TAG" | crontab -u "$REAL_USER" -
+    fi
+    if crontab -l 2>/dev/null | grep -q "$TAG"; then
+        echo "Removing old @reboot cron entry (${TAG}) from root crontab..."
+        crontab -l 2>/dev/null | grep -v "$TAG" | crontab -
+    fi
+done
 
 # Enable and start
 systemctl daemon-reload
