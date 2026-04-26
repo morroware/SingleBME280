@@ -1,17 +1,26 @@
+# Systemd unit template for the SingleSensor monitor.
+#
+# install.sh customizes this template at install time, substituting
+# the placeholders below with values detected from the install
+# environment (the user that ran sudo, the cloned repo path, and
+# that user's home directory).
+#
+# Do NOT copy this file directly to /etc/systemd/system/ — the
+# placeholders need to be resolved first. Run `sudo bash install.sh`.
 [Unit]
 Description=SingleSensor Monitoring (BME280 / SCD40)
 After=multi-user.target network.target
 
 [Service]
 Type=simple
-User=tech
-WorkingDirectory=/home/tech/SingleSensor
+User=__USER__
+WorkingDirectory=__INSTALL_DIR__
 ExecStartPre=/bin/sleep 15
-ExecStart=/usr/bin/python3 /home/tech/SingleSensor/SingleSensor.py
+ExecStart=/usr/bin/python3 __INSTALL_DIR__/SingleSensor.py
 Restart=on-failure
 RestartSec=10
-StandardOutput=append:/home/tech/sensor.log
-StandardError=append:/home/tech/sensor.log
+StandardOutput=append:__HOME__/sensor.log
+StandardError=append:__HOME__/sensor.log
 
 [Install]
 WantedBy=multi-user.target
