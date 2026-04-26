@@ -46,26 +46,21 @@ if systemctl list-unit-files "${LEGACY_SERVICE_NAME}.service" 2>/dev/null | grep
     echo "  Done."
 fi
 
-# Generate the service file with the correct user and paths
-cat > "$DEST" <<EOF
-[Unit]
-Description=SingleSensor Monitoring (BME280 / SCD40)
-After=multi-user.target network.target
+# Render the shipped template into the systemd location, substituting the
+# detected user/paths. Keeping the unit definition in singlesensor.service
+# (instead of a HEREDOC here) means there's a single source of truth.
+sed \
+    -e "s|__USER__|${REAL_USER}|g" \
+    -e "s|__INSTALL_DIR__|${SCRIPT_DIR}|g" \
+    -e "s|__HOME__|${REAL_HOME}|g" \
+    "$SERVICE_FILE" > "$DEST"
 
-[Service]
-Type=simple
-User=${REAL_USER}
-WorkingDirectory=${SCRIPT_DIR}
-ExecStartPre=/bin/sleep 15
-ExecStart=/usr/bin/python3 ${SCRIPT_DIR}/SingleSensor.py
-Restart=on-failure
-RestartSec=10
-StandardOutput=append:${REAL_HOME}/sensor.log
-StandardError=append:${REAL_HOME}/sensor.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# Sanity-check: any leftover placeholders mean the template drifted.
+if grep -q '__USER__\|__INSTALL_DIR__\|__HOME__' "$DEST"; then
+    echo "Error: ${DEST} still contains template placeholders after substitution."
+    echo "       Check ${SERVICE_FILE} for unexpected tokens."
+    exit 1
+fi
 
 # Remove old @reboot cron entries (both legacy and current names)
 for TAG in SingleBME280 SingleSensor; do
