@@ -67,7 +67,7 @@ hydrateStateFromServer().then((changed) => {
 // ---------------------------------------------------------------------
 function rerender() {
     if (!cachedSensors) return;
-    render(mainContent, cachedSensors, cachedReadings, sensorCountEl);
+    render(mainContent, cachedSensors, cachedReadings, sensorCountEl, currentRange);
     bindRenderedInteractions();
     updateEditChrome();
 }
