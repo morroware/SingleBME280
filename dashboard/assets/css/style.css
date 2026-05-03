@@ -38,7 +38,7 @@ body {
 
 /* ===== Top bar ===== */
 .topbar {
-    background: var(--bg-secondary);
+    background: linear-gradient(180deg, rgba(26,29,36,0.92), rgba(26,29,36,0.78));
     border-bottom: 1px solid var(--border);
     padding: 12px 24px;
     display: flex;
@@ -49,7 +49,8 @@ body {
     position: sticky;
     top: 0;
     z-index: 100;
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
 }
 
 .topbar-left {
@@ -110,6 +111,7 @@ body {
 .range-btn.active {
     background: var(--accent-blue);
     color: #fff;
+    box-shadow: 0 1px 3px rgba(74,158,255,0.45), inset 0 1px 0 rgba(255,255,255,0.18);
 }
 
 .topbar-actions {
@@ -220,20 +222,39 @@ body {
 }
 
 .glance-card {
-    background: var(--bg-card);
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+        var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: 14px 16px;
-    transition: all var(--transition);
+    padding: 14px 16px 12px;
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition), background var(--transition);
     cursor: pointer;
     position: relative;
     overflow: hidden;
 }
 
+.glance-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--accent-green), rgba(52,211,153,0));
+    opacity: 0;
+    transition: opacity var(--transition);
+}
+.glance-card:not(.offline)::before { opacity: 0.85; }
+.glance-card.offline::before {
+    background: linear-gradient(180deg, var(--accent-red), rgba(248,113,113,0));
+    opacity: 0.6;
+}
+
 .glance-card:hover {
     border-color: var(--accent-blue);
-    background: var(--bg-card-hover);
-    transform: translateY(-1px);
+    background:
+        linear-gradient(180deg, rgba(74,158,255,0.04), rgba(255,255,255,0)),
+        var(--bg-card-hover);
+    transform: translateY(-2px);
     box-shadow: var(--shadow);
 }
 
@@ -288,8 +309,8 @@ body {
     margin-bottom: 6px;
 }
 
-.gv-temp  { color: var(--accent-amber); font-weight: 700; }
-.gv-hum   { color: var(--accent-blue); font-weight: 600; }
+.gv-temp  { color: var(--accent-amber); font-weight: 700; font-size: 1rem; letter-spacing: -0.01em; }
+.gv-hum   { color: var(--accent-blue);  font-weight: 600; }
 .gv-co2   { color: var(--accent-purple); font-weight: 600; font-size: 0.8rem; }
 
 .glance-footer {
@@ -314,7 +335,11 @@ body {
     flex-shrink: 0;
 }
 
-.status-online  { background: var(--accent-green); }
+.status-online  {
+    background: var(--accent-green);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+    animation: live-pulse 2.4s ease-out infinite;
+}
 .status-offline { background: var(--accent-red); }
 
 .glance-link {
@@ -491,28 +516,31 @@ body {
     margin-bottom: 8px;
 }
 
-/* Stats row */
+/* Stats row — "Now" tile + Min/Avg/Max group with explicit range label */
 .chart-stats {
     display: flex;
-    gap: 16px;
-    margin-bottom: 12px;
+    align-items: stretch;
+    gap: 14px;
+    margin-bottom: 14px;
     flex-wrap: wrap;
 }
 
 .stat {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .stat-value {
-    font-size: 1.4rem;
+    font-size: 1.55rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    line-height: 1.2;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
 }
 
 .stat-value-sm {
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
@@ -522,18 +550,122 @@ body {
     font-size: 0.6rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     margin-top: 2px;
+    font-weight: 600;
 }
 
+/* "Now" — the prominent live reading (range-independent) */
+.stat-now {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    min-width: 110px;
+    flex-shrink: 0;
+}
+.stat-now-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+.stat-now-time {
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0.01em;
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+.stat-now .stat-value {
+    font-size: 1.7rem;
+}
+
+/* Live status dot — animates only when sensor is online */
+.live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+    box-shadow: 0 0 0 0 transparent;
+}
+.live-dot.live {
+    background: var(--accent-green);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+    animation: live-pulse 2s ease-out infinite;
+}
+@keyframes live-pulse {
+    0%   { box-shadow: 0 0 0 0   rgba(52, 211, 153, 0.55); }
+    70%  { box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);    }
+    100% { box-shadow: 0 0 0 0   rgba(52, 211, 153, 0);    }
+}
+
+/* Range-aware aggregate stats group: Min / Avg / Max with a small tag
+   showing exactly what window they're computed over */
+.stat-range-group {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-stat);
+}
+.stat-range-tag {
+    align-self: flex-start;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+}
+.stat-range-cells {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    align-items: end;
+}
+.stat-range-cells .stat { align-items: flex-start; }
+
+/* Per-feed accents */
 .stat-temp .stat-value,
 .stat-temp .stat-value-sm { color: var(--accent-amber); }
-
 .stat-hum .stat-value,
 .stat-hum .stat-value-sm  { color: var(--accent-blue); }
-
 .stat-co2 .stat-value,
 .stat-co2 .stat-value-sm  { color: var(--accent-purple); }
+
+.stat-now.stat-temp { border-color: rgba(251,191,36,0.25); }
+.stat-now.stat-hum  { border-color: rgba(74,158,255,0.25); }
+.stat-now.stat-co2  { border-color: rgba(167,139,250,0.25); }
+
+/* Panel-level range tag (header) */
+.range-tag {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    background: rgba(74,158,255,0.1);
+    border: 1px solid rgba(74,158,255,0.25);
+    padding: 2px 8px;
+    border-radius: 999px;
+    line-height: 1.4;
+}
 
 /* Chart canvas container */
 .chart-container {
@@ -856,6 +988,10 @@ body {
     .chart-stats { gap: 10px; }
     .panel-meta { gap: 6px; }
     .topbar-controls { gap: 8px; }
+    .stat-now { min-width: 0; flex: 1; }
+    .stat-now .stat-value { font-size: 1.45rem; }
+    .stat-range-cells { gap: 6px; }
+    .stat-range-cells .stat-value-sm { font-size: 0.85rem; }
 }
 
 /* ===================================================================

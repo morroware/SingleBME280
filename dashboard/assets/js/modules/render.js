@@ -9,7 +9,7 @@
 
 import {
     esc, timeAgo, fmt, calcStats, sensorUrl, feedsForSensor,
-    extractFeedSeries, CHART_COLORS,
+    extractFeedSeries, CHART_COLORS, rangeLabel, rangeLabelShort,
 } from './utils.js';
 import {
     getPanelState, getFeedState, isEditMode, sortSensors, sortFeeds,
@@ -28,8 +28,9 @@ const CHART_TYPES = [
 // ------------------------------------------------------------------
 // Public entry point
 // ------------------------------------------------------------------
-export function render(root, sensors, readingsData, sensorCountEl) {
+export function render(root, sensors, readingsData, sensorCountEl, currentRange) {
     destroyAllCharts();
+    const range = currentRange || '24h';
 
     if (!sensors || sensors.length === 0) {
         root.innerHTML =
@@ -52,7 +53,7 @@ export function render(root, sensors, readingsData, sensorCountEl) {
     html += '<div class="sensor-panels" id="sensorPanels">';
     for (let i = 0; i < ordered.length; i++) {
         const sid = ordered[i].sensor_id;
-        html += buildPanelHTML(ordered[i], readings[sid] || null);
+        html += buildPanelHTML(ordered[i], readings[sid] || null, range);
     }
     html += '</div>';
 
@@ -64,8 +65,10 @@ export function render(root, sensors, readingsData, sensorCountEl) {
         const ps = getPanelState(s.sensor_id);
         if (ps.collapsed) continue;
         const rd = readings[s.sensor_id];
-        if (!rd || !rd.data || rd.data.length === 0) continue;
-        mountChartsForSensor(s, rd.data);
+        const data = (rd && rd.data) ? rd.data : [];
+        // Always attempt to mount: gauges still render from sensor.latest
+        // when no time-series data is available for the chosen range.
+        mountChartsForSensor(s, data);
     }
 }
 
@@ -112,7 +115,7 @@ function buildGlanceSection(sensors) {
 // ------------------------------------------------------------------
 // Sensor panel
 // ------------------------------------------------------------------
-function buildPanelHTML(sensor, sensorReadings) {
+function buildPanelHTML(sensor, sensorReadings, range) {
     const sid   = sensor.sensor_id;
     const state = getPanelState(sid);
     const edit  = isEditMode();
@@ -121,6 +124,7 @@ function buildPanelHTML(sensor, sensorReadings) {
     const badgeClass = sensor.sensor_type === 'scd40' ? 'badge-scd40' : 'badge-bme280';
     const collClass = state.collapsed ? ' collapsed' : '';
     const url = sensorUrl(sensor);
+    const latest = (sensor && sensor.latest) ? sensor.latest : {};
 
     const allFeeds = feedsForSensor(sensor);
     const orderedFeeds = sortFeeds(sid, allFeeds);
@@ -140,6 +144,7 @@ function buildPanelHTML(sensor, sensorReadings) {
     html += '<span class="panel-name">' + esc(sensor.location_name) + '</span>';
     html += '<span class="glance-badge ' + badgeClass + '">' + esc((sensor.sensor_type || '').toUpperCase()) + '</span>';
     html += '<div class="panel-meta">';
+    html += '<span class="range-tag" title="Min / Max / Avg are calculated over the ' + esc(rangeLabel(range)) + '">' + esc(rangeLabelShort(range)) + '</span>';
     html += '<span class="panel-status"><span class="status-dot ' + onClass + '"></span>' + onText + '</span>';
     html += '<span class="panel-last-seen">' + esc(timeAgo(sensor.last_seen)) + '</span>';
     if (url) {
@@ -158,8 +163,11 @@ function buildPanelHTML(sensor, sensorReadings) {
         const fs = getFeedState(sid, fdef.key);
         if (fs.hidden) continue;
         const { values } = extractFeedSeries(data, fdef.key);
-        const stats = calcStats(values);
-        html += buildChartBlock(sid, fdef, fs, stats);
+        // Pass the actual most-recent reading from /api/sensors.php as the
+        // Current override so it doesn't drift when the user switches range.
+        const latestVal = latest[fdef.field];
+        const stats = calcStats(values, latestVal);
+        html += buildChartBlock(sid, fdef, fs, stats, range, sensor);
         visibleCount++;
     }
 
@@ -194,10 +202,14 @@ function buildPanelHTML(sensor, sensorReadings) {
 // ------------------------------------------------------------------
 // Per-feed chart block
 // ------------------------------------------------------------------
-function buildChartBlock(sid, fdef, fs, stats) {
+function buildChartBlock(sid, fdef, fs, stats, range, sensor) {
     const edit = isEditMode();
     const key = fdef.key;
     const statClass = 'stat-' + key;
+    const rangeShort = rangeLabelShort(range);
+    const rangeLong  = rangeLabel(range);
+    const lastSeenLabel = sensor && sensor.last_seen ? timeAgo(sensor.last_seen) : '';
+    const liveClass = sensor && sensor.online ? ' live' : '';
     const dataAttrs =
         ' data-sensor-id="' + esc(sid) + '"' +
         ' data-feed-key="' + esc(key) + '"' +
@@ -243,11 +255,28 @@ function buildChartBlock(sid, fdef, fs, stats) {
     const unit = fdef.unit;
     const unitSm = fdef.unitSm;
 
+    // Stats row: a prominent "Now" tile (range-independent — pulled straight
+    // from /api/sensors.php) sits next to a compact Min / Max / Avg group
+    // that's explicitly labelled with the active range, so the user always
+    // knows what window the aggregates cover.
     html += '<div class="chart-stats">';
-    html += '<div class="stat ' + statClass + '"><span class="stat-value">' + fmt(stats.current, dec, unit) + '</span><span class="stat-label">Current</span></div>';
+    html += '<div class="stat stat-now ' + statClass + '">';
+    html += '<span class="stat-now-label"><span class="live-dot' + liveClass + '"></span>Now';
+    if (lastSeenLabel) {
+        html += ' <span class="stat-now-time">· ' + esc(lastSeenLabel) + '</span>';
+    }
+    html += '</span>';
+    html += '<span class="stat-value">' + fmt(stats.current, dec, unit) + '</span>';
+    html += '</div>';
+
+    html += '<div class="stat-range-group" title="Calculated over the ' + esc(rangeLong) + '">';
+    html += '<div class="stat-range-tag">' + esc(rangeShort) + '</div>';
+    html += '<div class="stat-range-cells">';
     html += '<div class="stat ' + statClass + '"><span class="stat-value-sm">' + fmt(stats.min, dec, unitSm) + '</span><span class="stat-label">Min</span></div>';
-    html += '<div class="stat ' + statClass + '"><span class="stat-value-sm">' + fmt(stats.max, dec, unitSm) + '</span><span class="stat-label">Max</span></div>';
     html += '<div class="stat ' + statClass + '"><span class="stat-value-sm">' + fmt(stats.avg, dec, unitSm) + '</span><span class="stat-label">Avg</span></div>';
+    html += '<div class="stat ' + statClass + '"><span class="stat-value-sm">' + fmt(stats.max, dec, unitSm) + '</span><span class="stat-label">Max</span></div>';
+    html += '</div>';
+    html += '</div>';
     html += '</div>';
 
     if (fs.chartType === 'gauge') {
@@ -271,20 +300,22 @@ function buildChartBlock(sid, fdef, fs, stats) {
 function mountChartsForSensor(sensor, data) {
     const sid = sensor.sensor_id;
     const feeds = feedsForSensor(sensor);
+    const latest = (sensor && sensor.latest) ? sensor.latest : {};
     for (let i = 0; i < feeds.length; i++) {
         const fdef = feeds[i];
         const fs = getFeedState(sid, fdef.key);
         if (fs.hidden) continue;
-        mountFeedChart(sid, fdef, fs, data);
+        mountFeedChart(sid, fdef, fs, data, latest[fdef.field]);
     }
 }
 
-function mountFeedChart(sid, fdef, fs, data) {
+function mountFeedChart(sid, fdef, fs, data, latestVal) {
     const { values, points } = extractFeedSeries(data, fdef.key);
-    if (points.length === 0) return;
 
     if (fs.chartType === 'gauge') {
-        const stats = calcStats(values);
+        // Gauge always tracks the truly-latest reading so it doesn't change
+        // value when the user switches between time ranges.
+        const stats = calcStats(values, latestVal);
         if (!stats) return;
         const color = CHART_COLORS[fdef.field] || fdef.color;
         drawGauge('gauge-' + fdef.key + '-' + sid, stats.current,
@@ -292,6 +323,7 @@ function mountFeedChart(sid, fdef, fs, data) {
         return;
     }
 
+    if (points.length === 0) return;
     const canvas = document.getElementById('chart-' + fdef.key + '-' + sid);
     if (!canvas) return;
     if (fs.chartType === 'bar')       createBarChart(canvas, points, fdef.field, fdef.unit);

@@ -80,21 +80,56 @@ export function fmt(v, decimals, unit) {
     return v.toFixed(decimals !== undefined ? decimals : 1) + (unit || '');
 }
 
-export function calcStats(values) {
+/**
+ * Compute Min / Max / Avg over a series of values, plus a Current value.
+ *
+ * IMPORTANT: the readings API downsamples (averages) data for ranges > 24h,
+ * so the last point of `values` is NOT the real current reading at long
+ * ranges — it's the average of the most-recent bucket. Callers should pass
+ * `latestOverride` (the truly-latest raw reading from /api/sensors.php) so
+ * that the "Current" stat stays accurate as the user switches time ranges.
+ */
+export function calcStats(values, latestOverride) {
     const nums = [];
     for (let i = 0; i < values.length; i++) {
         const v = values[i];
         if (v !== null && v !== undefined && !isNaN(v)) nums.push(v);
     }
-    if (nums.length === 0) return null;
+    const hasOverride = latestOverride !== undefined && latestOverride !== null && !isNaN(latestOverride);
+    if (nums.length === 0) {
+        if (!hasOverride) return null;
+        return { current: latestOverride, min: latestOverride, max: latestOverride, avg: latestOverride };
+    }
     let min = nums[0], max = nums[0], sum = 0;
     for (let j = 0; j < nums.length; j++) {
         if (nums[j] < min) min = nums[j];
         if (nums[j] > max) max = nums[j];
         sum += nums[j];
     }
-    return { current: nums[nums.length - 1], min, max, avg: sum / nums.length };
+    return {
+        current: hasOverride ? latestOverride : nums[nums.length - 1],
+        min, max, avg: sum / nums.length,
+    };
 }
+
+const RANGE_LABELS = {
+    '1h':  'past hour',
+    '6h':  'past 6 hours',
+    '24h': 'past 24 hours',
+    '7d':  'past 7 days',
+    '30d': 'past 30 days',
+};
+
+const RANGE_LABELS_SHORT = {
+    '1h':  '1H',
+    '6h':  '6H',
+    '24h': '24H',
+    '7d':  '7D',
+    '30d': '30D',
+};
+
+export function rangeLabel(range)      { return RANGE_LABELS[range]       || range; }
+export function rangeLabelShort(range) { return RANGE_LABELS_SHORT[range] || range; }
 
 export function sensorUrl(sensor) {
     if (!sensor || !sensor.ip_address) return null;
